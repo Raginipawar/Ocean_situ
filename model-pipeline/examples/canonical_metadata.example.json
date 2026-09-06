@@ -1,0 +1,34 @@
+{
+  "source": "LOCAL_DEMO",
+  "source_url": null,
+  "region": "bay_of_bengal",
+  "processing_level": "checkpoint_1_schema_only",
+  "target_resolution_deg": 1.0,
+  "canonical_variables": {
+    "sst": {
+      "standard_name": "sea_surface_temperature",
+      "units": "degC"
+    },
+    "u_current": {
+      "standard_name": "eastward_sea_water_velocity",
+      "units": "m s-1"
+    },
+    "v_current": {
+      "standard_name": "northward_sea_water_velocity",
+      "units": "m s-1"
+    },
+    "wave_height": {
+      "standard_name": "sea_surface_wave_significant_height",
+      "units": "m"
+    },
+    "salinity": {
+      "standard_name": "sea_water_practical_salinity",
+      "units": "1e-3"
+    },
+    "chlorophyll": {
+      "standard_name": "mass_concentration_of_chlorophyll_a_in_sea_water",
+      "units": "mg m-3"
+    }
+  }
+}
+
