@@ -1,10 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Globe, type GlobeMarker } from "../components/globe/Globe";
 import { CoordinateReadout } from "../components/CoordinateReadout";
+import { PointInspector } from "../components/PointInspector";
 import { TrustBadge } from "../components/TrustBadge";
 import { api, ApiError } from "../lib/api";
 import { API_BASE_URL, REGION_CENTER, REGION_LABEL, TRUST_AMBER_MIN, TRUST_GREEN_MIN } from "../lib/config";
-import type { FusedResponse, TrustLabel } from "../lib/types";
+import type { FusedPoint, FusedResponse, TrustLabel } from "../lib/types";
+
+/** Stable id for a fused point, shared between the globe markers, the
+ * sensor list, and the click-to-inspect panel so all three can refer to
+ * "the same point" without the backend needing to hand out real ids. */
+const pointId = (p: { lat: number; lon: number }) => `${p.lat}-${p.lon}`;
+
+const NEARBY_WINDOW_DEG = 3;
+const NEARBY_MAX_POINTS = 80;
 
 type ConnectionState = "checking" | "online" | "offline";
 type Mode = "expert" | "public";
@@ -60,6 +69,7 @@ export function DigitalTwin() {
   const [engine, setEngine] = useState<"auto" | "gnn" | "fallback">("auto");
   const [mode, setMode] = useState<Mode>("expert");
   const [center, setCenter] = useState(REGION_CENTER);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const load = useCallback(async (chosenEngine: "auto" | "gnn" | "fallback") => {
     setError(null);
@@ -80,12 +90,38 @@ export function DigitalTwin() {
 
   const markers: GlobeMarker[] =
     fused?.points.filter((p) => p.is_sensor_node).map((p) => ({
+      id: pointId(p),
       lat: p.lat,
       lon: p.lon,
       label: `${p.sst_c?.toFixed(1) ?? "N/A"}°C`,
       detail: `confidence ${Math.round(p.confidence * 100)}%`,
       trust: p.trust_label,
     })) ?? [];
+
+  const selectedPoint: FusedPoint | null = useMemo(() => {
+    if (!fused || !selectedId) return null;
+    return fused.points.find((p) => pointId(p) === selectedId) ?? null;
+  }, [fused, selectedId]);
+
+  const nearbyPoints: FusedPoint[] = useMemo(() => {
+    if (!fused || !selectedPoint) return [];
+    const inWindow = fused.points.filter(
+      (p) =>
+        Math.abs(p.lat - selectedPoint.lat) <= NEARBY_WINDOW_DEG &&
+        Math.abs(p.lon - selectedPoint.lon) <= NEARBY_WINDOW_DEG,
+    );
+    if (inWindow.length <= NEARBY_MAX_POINTS) return inWindow;
+    // Keep the selected point plus the nearest others if the window is dense.
+    const rest = inWindow
+      .filter((p) => p !== selectedPoint)
+      .sort((a, b) => {
+        const da = (a.lat - selectedPoint.lat) ** 2 + (a.lon - selectedPoint.lon) ** 2;
+        const db = (b.lat - selectedPoint.lat) ** 2 + (b.lon - selectedPoint.lon) ** 2;
+        return da - db;
+      })
+      .slice(0, NEARBY_MAX_POINTS - 1);
+    return [selectedPoint, ...rest];
+  }, [fused, selectedPoint]);
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-28">
@@ -136,7 +172,14 @@ export function DigitalTwin() {
 
       <div className="mt-12 grid gap-12 lg:grid-cols-[1fr_1fr]">
         <div className="flex flex-col items-center gap-4">
-          <Globe focus={REGION_CENTER} markers={markers} onCenterChange={setCenter} className="w-full max-w-[520px]" />
+          <Globe
+            focus={REGION_CENTER}
+            markers={markers}
+            onCenterChange={setCenter}
+            onMarkerClick={setSelectedId}
+            selectedId={selectedId}
+            className="w-full max-w-[520px]"
+          />
           <CoordinateReadout label="Viewing" lat={center.lat} lon={center.lon} className="opacity-70" />
           {fused && (
             <div className="flex flex-wrap justify-center gap-4 text-xs opacity-70">
@@ -148,6 +191,7 @@ export function DigitalTwin() {
               ))}
             </div>
           )}
+          <p className="max-w-[520px] text-center text-xs opacity-50">Click any point on the globe to inspect it.</p>
         </div>
 
         <div>
@@ -212,9 +256,10 @@ export function DigitalTwin() {
                 {fused.points
                   .filter((p) => p.is_sensor_node)
                   .map((p) => (
-                    <div
-                      key={`${p.lat}-${p.lon}`}
-                      className="flex items-center justify-between gap-3 border-b py-2 text-sm"
+                    <button
+                      key={pointId(p)}
+                      onClick={() => setSelectedId(pointId(p))}
+                      className="flex w-full items-center justify-between gap-3 border-b py-2 text-left text-sm transition-opacity hover:opacity-70"
                       style={{ borderColor: "var(--color-border)" }}
                     >
                       <span className="font-mono-data opacity-70">
@@ -222,7 +267,7 @@ export function DigitalTwin() {
                       </span>
                       <span className="opacity-70">{p.sst_c?.toFixed(2) ?? "N/A"}°C</span>
                       <TrustBadge label={p.trust_label} confidence={p.confidence} />
-                    </div>
+                    </button>
                   ))}
               </div>
             </div>
@@ -238,6 +283,10 @@ export function DigitalTwin() {
           </div>
         </div>
       </div>
+
+      {selectedPoint && (
+        <PointInspector point={selectedPoint} nearby={nearbyPoints} onClose={() => setSelectedId(null)} />
+      )}
     </div>
   );
 }

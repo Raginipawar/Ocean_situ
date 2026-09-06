@@ -10,6 +10,8 @@ import { useTheme } from "../../theme/ThemeProvider";
 export type TrustLabel = "green" | "amber" | "red";
 
 export interface GlobeMarker {
+  /** Stable identity for click/selection correlation back to the caller's own data. */
+  id: string;
   lat: number;
   lon: number;
   label: string;
@@ -50,6 +52,10 @@ interface GlobeProps {
   regionBBox?: RegionBBox;
   className?: string;
   onCenterChange?: (center: { lat: number; lon: number }) => void;
+  /** Click-to-inspect: fires with the clicked marker's id. */
+  onMarkerClick?: (id: string) => void;
+  /** id of the currently-selected marker, if any -- drawn larger/brighter. */
+  selectedId?: string | null;
 }
 
 const EARTH_RADIUS = 1;
@@ -154,9 +160,18 @@ function EarthMesh() {
   );
 }
 
-function Marker({ marker }: { marker: GlobeMarker }) {
+function Marker({
+  marker,
+  selected,
+  onClick,
+}: {
+  marker: GlobeMarker;
+  selected?: boolean;
+  onClick?: (id: string) => void;
+}) {
   const { theme } = useTheme();
   const haloRef = useRef<THREE.Mesh>(null);
+  const [hovered, setHovered] = useState(false);
   const position = useMemo(
     () => latLonToVector3(marker.lat, marker.lon, EARTH_RADIUS * 1.015),
     [marker.lat, marker.lon],
@@ -166,20 +181,51 @@ function Marker({ marker }: { marker: GlobeMarker }) {
   // a CSS var() reference, which Three.js's Color parser can't read and
   // silently renders as white.
   const color = marker.trust ? TRUST_HEX[theme][marker.trust] : (marker.color ?? "#79a4c0");
+  const coreRadius = selected ? 0.024 : hovered ? 0.019 : 0.014;
 
   useFrame(({ clock }) => {
     if (!haloRef.current) return;
     const t = (clock.getElapsedTime() * 0.9) % 1;
     haloRef.current.scale.setScalar(1 + t * 2.2);
-    (haloRef.current.material as THREE.MeshBasicMaterial).opacity = 0.5 * (1 - t);
+    (haloRef.current.material as THREE.MeshBasicMaterial).opacity = (selected ? 0.8 : 0.5) * (1 - t);
   });
+
+  useEffect(() => {
+    document.body.style.cursor = hovered ? "pointer" : "grab";
+    return () => {
+      document.body.style.cursor = "grab";
+    };
+  }, [hovered]);
 
   return (
     <group position={position}>
+      <mesh
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick?.(marker.id);
+        }}
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          setHovered(true);
+        }}
+        onPointerOut={() => setHovered(false)}
+      >
+        {/* Slightly larger invisible hit-target so a small dot is still easy to click */}
+        <sphereGeometry args={[0.03, 8, 8]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
       <mesh>
-        <sphereGeometry args={[0.014, 12, 12]} />
+        <sphereGeometry args={[coreRadius, 14, 14]} />
         <meshBasicMaterial color={color} />
       </mesh>
+      {selected && (
+        <mesh>
+          {/* Sphere, not a ring -- rotation-invariant, so the "selected" glow
+              reads correctly from every camera angle without billboarding. */}
+          <sphereGeometry args={[coreRadius * 1.7, 16, 16]} />
+          <meshBasicMaterial color={color} transparent opacity={0.35} depthWrite={false} />
+        </mesh>
+      )}
       <mesh ref={haloRef}>
         <sphereGeometry args={[0.014, 12, 12]} />
         <meshBasicMaterial color={color} transparent opacity={0.5} depthWrite={false} />
@@ -203,7 +249,15 @@ function CenterTracker({ onCenterChange }: { onCenterChange?: (c: { lat: number;
   return null;
 }
 
-export function Globe({ focus, markers = [], regionBBox, className, onCenterChange }: GlobeProps) {
+export function Globe({
+  focus,
+  markers = [],
+  regionBBox,
+  className,
+  onCenterChange,
+  onMarkerClick,
+  selectedId,
+}: GlobeProps) {
   const { theme } = useTheme();
   const [initialCameraPosition] = useState(() => latLonToVector3(focus.lat, focus.lon, CAMERA_DISTANCE));
   const bboxPoints = useMemo(
@@ -226,14 +280,14 @@ export function Globe({ focus, markers = [], regionBBox, className, onCenterChan
           <EarthMesh />
           {bboxPoints && <Line points={bboxPoints} color="#79a4c0" lineWidth={1.6} />}
           {markers.map((marker) => (
-            <Marker key={`${marker.label}-${marker.lat}-${marker.lon}`} marker={marker} />
+            <Marker key={marker.id} marker={marker} selected={marker.id === selectedId} onClick={onMarkerClick} />
           ))}
           <CenterTracker onCenterChange={onCenterChange} />
           <OrbitControls
             target={[0, 0, 0]}
             enableZoom={false}
             enablePan={false}
-            autoRotate
+            autoRotate={!selectedId}
             autoRotateSpeed={0.35}
             enableDamping
             dampingFactor={0.08}
