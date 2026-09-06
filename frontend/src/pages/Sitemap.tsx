@@ -12,11 +12,11 @@ const SECTIONS: SitemapSection[] = [
     to: "/",
     labelKey: "nav.home",
     children: [
+      { to: "/#build-status", label: "Build status, honestly" },
       { to: "/#the-gap", label: "The problem, explained properly" },
       { to: "/#what-makes-it-different", label: "What makes it different" },
       { to: "/#architecture", label: "System architecture" },
       { to: "/#why-now", label: "Why now" },
-      { to: "/#build-status", label: "Build status, honestly" },
       { to: "/#competitive-landscape", label: "Competitive landscape" },
     ],
   },

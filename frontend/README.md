@@ -141,15 +141,15 @@ A lightweight custom i18n layer (`src/i18n/`), not a full framework, since
 the scope here is the site chrome rather than every paragraph of technical
 copy. `I18nProvider.tsx` exposes a `t(key)` function that falls back to
 English for any untranslated key, and `translations.ts` holds the
-dictionaries. Matching the INCOIS reference, the language set is **English,
-Hindi, and Telugu**, covering the nav, the hero headline and pitch, CTAs, the
-accessibility toolbar's own labels, and the footer.
+dictionaries. The language set is **English, Hindi, Bengali, Marathi,
+Gujarati, and Telugu**, covering the nav, the hero headline and pitch, CTAs,
+the accessibility toolbar's own labels, and the footer.
 
 **Translation coverage is intentionally partial and should be reviewed
-before a real demo or launch.** The Hindi and Telugu strings here are
-AI-assisted translations of the highest-visibility text, not a native-speaker
-pass, and the deeper technical prose on Services/About stays English-only
-for now rather than risk a mistranslated scientific claim on an official,
+before a real demo or launch.** The non-English strings here are AI-assisted
+translations of the highest-visibility text, not a native-speaker pass, and
+the deeper technical prose on Services/About stays English-only for now
+rather than risk a mistranslated scientific claim on an official,
 disaster-management-facing tool. Expanding coverage is a matter of adding
 keys to `translations.ts`.
 
@@ -161,6 +161,34 @@ plain hierarchical list of every route and, one level deeper, every named
 section on that route (the same anchors the in-page nav scrolls to, each
 given a `scroll-anchor` class in `src/index.css` so the fixed header doesn't
 cover the target on jump).
+
+### Notification ticker + build status (also INCOIS-inspired)
+
+Right after the Home hero: a slim scrolling ticker (`NotificationTicker` in
+`Home.tsx`, `.ticker-track` in `index.css`, a plain CSS-keyframe marquee, no
+extra library) styled after the notification bar on incois.gov.in. It does
+**not** claim to be a live feed. INCOIS's bar shows real dated bulletins;
+this project has no live drift alerts yet (`/alerts` isn't built), so
+inventing dated bulletins would be exactly the kind of fake content this
+whole project has avoided elsewhere. Instead it honestly labels itself "What
+VARUNA watches for" and lists the real alert *categories* the Drift Memory
+Engine is designed to raise (SST divergence, wave height divergence, current
+divergence, cyclone-scale drift), each tied to a real variable in
+`graph_fusion/config.py`.
+
+Each ticker item is a real link, not decoration, matching the pattern on
+incois.gov.in where clicking a bulletin opens the real advisory behind it.
+These open the actual current INCOIS service for that category (verified
+`200 OK` at the time of writing): Ocean State Forecast for SST and current
+divergence, the High Wave Advisory for wave height divergence, and the Storm
+Surge Warning page for cyclone-scale drift.
+
+Immediately below that: the "Build status, honestly" widget (tabs for real
+per-engine build status and the real research references, plus a `LiveStatusCard`
+that pings the backend's actual `/health` endpoint) — this is this project's
+answer to INCOIS's Latest/What's New/Publications tabs and its "Live
+Advisories" widget, built from real project state instead of Vacancies/
+Tenders/RTI, which don't apply to a hackathon prototype.
 
 ### Motion
 
@@ -196,19 +224,27 @@ page plots points, and only once the real backend has returned them.
 
 ### Signature interactive moments
 
-Three components from [React Bits](https://reactbits.dev) (MIT + Commons
+Four components from [React Bits](https://reactbits.dev) (MIT + Commons
 Clause, vendored into `src/components/effects/` and adapted, not installed as
 a package) at the moments where an interactive detail earns its place rather
 than being sprinkled everywhere:
 
 - **`SplashCursor`** (Home hero only): a WebGL fluid-sim cursor trail, tuned
-  down from its flashy rainbow default to a single light sky blue
-  (`#87CEFA`), lower resolution for performance, and **adapted to bind to its
-  own section instead of the whole viewport** (the original tracks the
-  cursor across the entire page via `window`/`document.body` listeners and a
-  fixed full-screen canvas; here it reads its own container's
+  down from its flashy rainbow default to a faint, matte dark blue
+  (`#0b345a`, `SHADING={false}` to drop the metallic specular look, wrapped
+  at 35% opacity), lower resolution for performance, and **adapted to bind
+  to its own section instead of the whole viewport** (the original tracks
+  the cursor across the entire page via `window`/`document.body` listeners
+  and a fixed full-screen canvas; here it reads its own container's
   `getBoundingClientRect()` and ignores pointer input outside it, so it only
-  reacts inside the hero). Skipped entirely under `prefers-reduced-motion`.
+  reacts inside the hero, and only mounts at all once the hero is actually
+  on screen). Skipped entirely under `prefers-reduced-motion`.
+- **`SpecularButton`** (the two primary "Open the Digital Twin" CTAs on
+  Home): a WebGL edge-light sweep on hover/proximity, **adapted to add a
+  `to` prop** (the original only renders a `<button>` with `onClick`; here,
+  when `to` is set, it renders a real react-router `<Link>` through the same
+  ref so internal navigation, middle-click, and "open in new tab" keep
+  working, not just a JS-driven click handler).
 - **`RippleDistortion`** (Home, a full-bleed panel before the closing CTA):
   a real photo of ocean waves that visibly ripples where you hover, grayscale
   with a blue tint matching the current theme's accent color. Already

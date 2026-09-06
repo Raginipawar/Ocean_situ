@@ -15,21 +15,41 @@ const TRUST_COLOR: Record<TrustLabel, string> = {
   red: "var(--color-trust-red)",
 };
 
-function worstLabel(points: FusedResponse["points"]): TrustLabel {
-  if (points.some((p) => p.trust_label === "red")) return "red";
-  if (points.some((p) => p.trust_label === "amber")) return "amber";
-  return "green";
+/**
+ * The point in `points` nearest to `at` (plain lat/lon distance -- this is a
+ * UI "what am I looking at" lookup over a regional-scale grid, not a
+ * navigation calculation, so it doesn't need haversine precision).
+ *
+ * Deliberately NOT a global worst-case across the whole fused grid: a
+ * fisherman near a well-covered green area shouldn't be told "Avoid"
+ * because some unrelated corner of the Bay of Bengal disagrees. Public mode
+ * answers "is it safe *here*," not "is it safe *anywhere in the region*."
+ */
+function nearestPoint(
+  points: FusedResponse["points"],
+  at: { lat: number; lon: number },
+): FusedResponse["points"][number] | null {
+  let best: FusedResponse["points"][number] | null = null;
+  let bestDist = Infinity;
+  for (const p of points) {
+    const d = (p.lat - at.lat) ** 2 + (p.lon - at.lon) ** 2;
+    if (d < bestDist) {
+      bestDist = d;
+      best = p;
+    }
+  }
+  return best;
 }
 
 const PUBLIC_MESSAGE: Record<TrustLabel, { title: string; body: string }> = {
-  green: { title: "Safe", body: "The forecast matches real sensor readings across this region." },
+  green: { title: "Safe", body: "The forecast matches real sensor readings at this location." },
   amber: {
     title: "Caution",
-    body: "Some readings in this region differ from the forecast. Check conditions before heading out.",
+    body: "Readings near this location differ somewhat from the forecast. Check conditions before heading out.",
   },
   red: {
     title: "Avoid",
-    body: "Real sensors disagree strongly with the forecast in part of this region. Treat the forecast as unreliable there.",
+    body: "Real sensors disagree strongly with the forecast near this location. Treat the forecast as unreliable here.",
   },
 };
 
@@ -64,7 +84,7 @@ export function DigitalTwin() {
       lon: p.lon,
       label: `${p.sst_c?.toFixed(1) ?? "N/A"}°C`,
       detail: `confidence ${Math.round(p.confidence * 100)}%`,
-      color: TRUST_COLOR[p.trust_label],
+      trust: p.trust_label,
     })) ?? [];
 
   return (
@@ -131,21 +151,26 @@ export function DigitalTwin() {
         </div>
 
         <div>
-          {mode === "public" && fused && (
-            <div
-              className="rounded-2xl border p-8"
-              style={{ borderColor: TRUST_COLOR[worstLabel(fused.points)] }}
-            >
-              <h2 className="font-display text-3xl" style={{ color: TRUST_COLOR[worstLabel(fused.points)] }}>
-                {PUBLIC_MESSAGE[worstLabel(fused.points)].title}
-              </h2>
-              <p className="mt-3 text-sm opacity-80">{PUBLIC_MESSAGE[worstLabel(fused.points)].body}</p>
-              <p className="mt-4 font-mono-data text-xs opacity-50">
-                Based on {fused.points.length} fused grid points, {fused.summary.n_sensors} real
-                sensors, engine: {fused.summary.engine}.
-              </p>
-            </div>
-          )}
+          {mode === "public" && fused && (() => {
+            const nearest = nearestPoint(fused.points, center);
+            const label = nearest?.trust_label ?? "amber";
+            return (
+              <div className="rounded-2xl border p-8" style={{ borderColor: TRUST_COLOR[label] }}>
+                <h2 className="font-display text-3xl" style={{ color: TRUST_COLOR[label] }}>
+                  {PUBLIC_MESSAGE[label].title}
+                </h2>
+                <p className="mt-3 text-sm opacity-80">{PUBLIC_MESSAGE[label].body}</p>
+                <p className="mt-4 font-mono-data text-xs opacity-50">
+                  Nearest fused point: {nearest ? `${nearest.lat.toFixed(2)}, ${nearest.lon.toFixed(2)}` : "n/a"}
+                  {" · "}
+                  {fused.summary.n_sensors} real sensors, engine: {fused.summary.engine}.
+                </p>
+                <p className="mt-2 text-xs opacity-50">
+                  Drag the globe to check a different spot in the Bay of Bengal.
+                </p>
+              </div>
+            );
+          })()}
 
           {mode === "expert" && fused && (
             <div>

@@ -7,13 +7,33 @@ import earthNightMap from "../../assets/textures/earth_nightmap.jpg";
 import earthCloudsMap from "../../assets/textures/earth_clouds.jpg";
 import { useTheme } from "../../theme/ThemeProvider";
 
+export type TrustLabel = "green" | "amber" | "red";
+
 export interface GlobeMarker {
   lat: number;
   lon: number;
   label: string;
   detail?: string;
+  /** Preferred: resolved theme-aware color internally (see TRUST_HEX below). */
+  trust?: TrustLabel;
+  /**
+   * Escape hatch for a literal color. Must be a value Three.js's Color
+   * parser understands (hex like "#2ecc71", or an rgb()/named color) --
+   * NOT a CSS custom property reference. `var(--color-trust-green)` is
+   * only resolvable by the DOM/CSSOM; passed straight into a WebGL
+   * material it fails to parse and silently renders white. If you need a
+   * value driven by index.css, resolve it there and pass the hex string.
+   */
   color?: string;
 }
+
+// Mirrors index.css's --color-trust-* light/dark values exactly. Kept in
+// sync manually (same pattern as lib/config.ts mirroring the backend) since
+// a WebGL material color can't read a CSS custom property directly.
+const TRUST_HEX: Record<"light" | "dark", Record<TrustLabel, string>> = {
+  light: { green: "#1f8a5f", amber: "#b9770e", red: "#c1402f" },
+  dark: { green: "#3ddc97", amber: "#f2b134", red: "#ef5350" },
+};
 
 interface RegionBBox {
   latMin: number;
@@ -135,12 +155,17 @@ function EarthMesh() {
 }
 
 function Marker({ marker }: { marker: GlobeMarker }) {
+  const { theme } = useTheme();
   const haloRef = useRef<THREE.Mesh>(null);
   const position = useMemo(
     () => latLonToVector3(marker.lat, marker.lon, EARTH_RADIUS * 1.015),
     [marker.lat, marker.lon],
   );
-  const color = marker.color ?? "#79a4c0";
+  // `trust` (theme-resolved here) is preferred; `color` is a literal escape
+  // hatch. Either way this must end up a real hex/rgb/named color -- never
+  // a CSS var() reference, which Three.js's Color parser can't read and
+  // silently renders as white.
+  const color = marker.trust ? TRUST_HEX[theme][marker.trust] : (marker.color ?? "#79a4c0");
 
   useFrame(({ clock }) => {
     if (!haloRef.current) return;

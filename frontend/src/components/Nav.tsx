@@ -13,7 +13,7 @@ export function Nav() {
   ];
 
   return (
-    <header className="glass-bar fixed inset-x-0 top-0 z-50 border-b" style={{ borderColor: "var(--color-border)" }}>
+    <header className="glass-bar fixed inset-x-0 top-0 z-50 border-b border-[var(--color-border)] dark:border-black">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 py-3">
         <NavLink to="/" className="font-display text-2xl tracking-tight">
           VARUNA

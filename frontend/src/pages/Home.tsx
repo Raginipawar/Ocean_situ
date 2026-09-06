@@ -10,6 +10,7 @@ import { useInView } from "../lib/useInView";
 import { REGION_BBOX, REGION_CENTER, REGION_LABEL } from "../lib/config";
 import SplashCursor from "../components/effects/SplashCursor";
 import RippleDistortion from "../components/effects/RippleDistortion";
+import SpecularButton from "../components/effects/SpecularButton";
 import oceanWaves from "../assets/effects/ocean-waves.jpg";
 
 function LiveStatusCard() {
@@ -46,6 +47,57 @@ function LiveStatusCard() {
         Drift alerts aren't wired in yet, the Drift Memory Engine's /alerts endpoint isn't built.
         This card shows what's actually connected, not a placeholder feed.
       </p>
+    </div>
+  );
+}
+
+function BellIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+      <path d="M12 22a2.2 2.2 0 0 0 2.2-2.2H9.8A2.2 2.2 0 0 0 12 22Zm7-5.5V11a7 7 0 0 0-5.5-6.84V3a1.5 1.5 0 0 0-3 0v1.16A7 7 0 0 0 5 11v5.5L3 18.5V19.5h18V18.5Z" />
+    </svg>
+  );
+}
+
+// Each category links to the real INCOIS advisory service that actually
+// covers it today, not a fabricated bulletin: this project's own drift
+// alerts aren't live yet (see the Live status card below), so the ticker
+// points at the real thing instead of pretending to be one.
+const ALERT_CATEGORIES = [
+  { label: "SST divergence alerts", href: "https://incois.gov.in/site/services/osf.jsp" },
+  { label: "Wave height divergence", href: "https://incois.gov.in/site/services/hwa.jsp" },
+  { label: "Current divergence", href: "https://incois.gov.in/site/services/osf.jsp" },
+  { label: "Cyclone-scale drift detection", href: "https://tsunami.incois.gov.in/TEWS/AboutStormSurge.jsp" },
+];
+
+function NotificationTicker() {
+  const items = [...ALERT_CATEGORIES, ...ALERT_CATEGORIES];
+  return (
+    <div className="flex items-stretch overflow-hidden" style={{ backgroundColor: "var(--palette-ambassador-blue)" }}>
+      <span
+        className="font-nav z-10 flex shrink-0 items-center gap-1.5 px-4 py-2 text-[10px]"
+        style={{ backgroundColor: "var(--palette-celestial-canvas)", color: "#ffffff" }}
+      >
+        <BellIcon /> WHAT VARUNA WATCHES FOR
+      </span>
+      <div className="flex items-center overflow-hidden">
+        <div className="ticker-track">
+          {items.map((item, i) => (
+            <a
+              key={i}
+              href={item.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`See INCOIS's real advisory for this: ${item.href}`}
+              className="font-nav flex shrink-0 items-center px-6 text-[10px] opacity-90 transition-opacity hover:opacity-100 hover:underline"
+              style={{ color: "#ffffff" }}
+            >
+              {item.label}
+              <span className="ml-6 opacity-50">|</span>
+            </a>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -217,7 +269,7 @@ export function Home() {
         <div className="relative z-10 mx-auto grid w-full max-w-7xl grid-cols-1 items-center gap-12 px-6 lg:grid-cols-[1.1fr_1fr]">
           <div>
             <p className="font-nav text-xs opacity-60">{t("hero.eyebrow")}</p>
-            <h1 className="font-display gradient-text mt-4 text-6xl leading-[0.95] sm:text-7xl lg:text-8xl">
+            <h1 className="font-display gradient-text hero-headline mt-4 text-6xl leading-[1.05] sm:text-7xl lg:text-8xl">
               {t("hero.headline1")}
               <br />
               {t("hero.headline2")}
@@ -225,14 +277,20 @@ export function Home() {
               {t("hero.headline3")}
             </h1>
             <p className="mt-6 max-w-lg text-lg opacity-80">{t("hero.pitch")}</p>
-            <div className="mt-8 flex flex-wrap gap-4">
-              <Link
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              <SpecularButton
                 to="/digital-twin"
-                className="font-nav rounded-full px-6 py-3 text-xs"
-                style={{ backgroundColor: "var(--color-accent)", color: "var(--color-bg)" }}
+                size="md"
+                radius={999}
+                tint="var(--color-accent)"
+                tintOpacity={1}
+                textColor="#ffffff"
+                lineColor="#c0d2e0"
+                baseColor="#091e39"
+                className="font-nav"
               >
                 {t("hero.ctaPrimary")}
-              </Link>
+              </SpecularButton>
               <Link to="/services" className="font-nav rounded-full border px-6 py-3 text-xs" style={{ borderColor: "var(--color-border)" }}>
                 {t("hero.ctaSecondary")}
               </Link>
@@ -251,6 +309,72 @@ export function Home() {
               Drag to rotate. Highlighted region is VARUNA's scope-locked demo area.
             </p>
           </div>
+        </div>
+      </section>
+
+      <NotificationTicker />
+
+      <section id="build-status" className="scroll-anchor mx-auto max-w-5xl px-6 py-16">
+        <Reveal>
+          <p className="font-nav text-xs opacity-60">Where things stand</p>
+          <h2 className="font-display mt-3 text-4xl sm:text-5xl">Build status, honestly</h2>
+        </Reveal>
+
+        <div className="mt-12 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
+          <Reveal className="rounded-2xl border p-6" >
+            <div style={{ borderColor: "var(--color-border)" }}>
+              <div className="flex gap-6 border-b pb-3" style={{ borderColor: "var(--color-border)" }}>
+                <button
+                  type="button"
+                  onClick={() => setUpdatesTab("status")}
+                  className="font-nav text-xs"
+                  style={{ opacity: updatesTab === "status" ? 1 : 0.5 }}
+                >
+                  Build status
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUpdatesTab("research")}
+                  className="font-nav text-xs"
+                  style={{ opacity: updatesTab === "research" ? 1 : 0.5 }}
+                >
+                  Research references
+                </button>
+              </div>
+
+              {updatesTab === "status" && (
+                <ul className="mt-4 space-y-3">
+                  {BUILD_STATUS.map((row) => (
+                    <li key={row.name} className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
+                      <span className="font-nav w-44 shrink-0 text-xs">{row.name}</span>
+                      <span
+                        className="font-mono-data w-28 shrink-0 text-xs"
+                        style={{ color: row.status === "Live" ? "var(--color-trust-green)" : "var(--color-ink-muted)" }}
+                      >
+                        {row.status}
+                      </span>
+                      <span className="text-xs opacity-70">{row.detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {updatesTab === "research" && (
+                <ul className="mt-4 space-y-3">
+                  {RESEARCH_REFERENCES.map((row) => (
+                    <li key={row.name}>
+                      <span className="font-nav text-xs">{row.name}</span>
+                      <span className="ml-2 text-xs opacity-70">{row.body}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </Reveal>
+
+          <Reveal>
+            <LiveStatusCard />
+          </Reveal>
         </div>
       </section>
 
@@ -353,70 +477,6 @@ export function Home() {
         </div>
       </section>
 
-      <section id="build-status" className="scroll-anchor mx-auto max-w-5xl px-6 py-28">
-        <Reveal>
-          <p className="font-nav text-xs opacity-60">Where things stand</p>
-          <h2 className="font-display mt-3 text-4xl sm:text-5xl">Build status, honestly</h2>
-        </Reveal>
-
-        <div className="mt-12 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
-          <Reveal className="rounded-2xl border p-6" >
-            <div style={{ borderColor: "var(--color-border)" }}>
-              <div className="flex gap-6 border-b pb-3" style={{ borderColor: "var(--color-border)" }}>
-                <button
-                  type="button"
-                  onClick={() => setUpdatesTab("status")}
-                  className="font-nav text-xs"
-                  style={{ opacity: updatesTab === "status" ? 1 : 0.5 }}
-                >
-                  Build status
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUpdatesTab("research")}
-                  className="font-nav text-xs"
-                  style={{ opacity: updatesTab === "research" ? 1 : 0.5 }}
-                >
-                  Research references
-                </button>
-              </div>
-
-              {updatesTab === "status" && (
-                <ul className="mt-4 space-y-3">
-                  {BUILD_STATUS.map((row) => (
-                    <li key={row.name} className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
-                      <span className="font-nav w-44 shrink-0 text-xs">{row.name}</span>
-                      <span
-                        className="font-mono-data w-28 shrink-0 text-xs"
-                        style={{ color: row.status === "Live" ? "var(--color-trust-green)" : "var(--color-ink-muted)" }}
-                      >
-                        {row.status}
-                      </span>
-                      <span className="text-xs opacity-70">{row.detail}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {updatesTab === "research" && (
-                <ul className="mt-4 space-y-3">
-                  {RESEARCH_REFERENCES.map((row) => (
-                    <li key={row.name}>
-                      <span className="font-nav text-xs">{row.name}</span>
-                      <span className="ml-2 text-xs opacity-70">{row.body}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </Reveal>
-
-          <Reveal>
-            <LiveStatusCard />
-          </Reveal>
-        </div>
-      </section>
-
       <section id="competitive-landscape" className="scroll-anchor px-6 py-28" style={{ backgroundColor: "var(--color-bg-raised)" }}>
         <div className="mx-auto max-w-5xl">
           <Reveal>
@@ -501,13 +561,23 @@ export function Home() {
             The Graph Fusion Engine is built and tested. Connect it below to watch real model
             output get corrected against real sensor readings, point by point.
           </p>
-          <Link
-            to="/digital-twin"
-            className="font-nav mt-8 inline-block rounded-full px-8 py-4 text-xs"
-            style={{ backgroundColor: "var(--color-accent)", color: "var(--color-bg)" }}
-          >
-            {t("hero.ctaPrimary")}
-          </Link>
+          <div className="mt-8 flex justify-center">
+            <SpecularButton
+              to="/digital-twin"
+              size="lg"
+              radius={999}
+              tint="var(--color-accent)"
+              tintOpacity={1}
+              textColor="#ffffff"
+              lineColor="#c0d2e0"
+              baseColor="#091e39"
+              autoAnimate
+              speed={0.25}
+              className="font-nav"
+            >
+              {t("hero.ctaPrimary")}
+            </SpecularButton>
+          </div>
         </Reveal>
       </section>
     </>
