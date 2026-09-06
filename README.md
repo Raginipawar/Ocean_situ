@@ -1,4 +1,4 @@
-# VARUNA — SIH26067
+# VARUNA 
 
 **Visualization & Assimilation of Real-time Underwater Network Analytics**
 Smart India Hackathon 2026 · Team **Hudson Hackers** · Problem Statement
