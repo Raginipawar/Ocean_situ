@@ -27,7 +27,7 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 // Real endpoints exposed by varuna-graph-fusion/src/graph_fusion/api.py.
-// There is no client-side mock fallback here on purpose — if the backend
+// There is no client-side mock fallback here on purpose. If the backend
 // isn't running, the UI should say so, not silently fabricate ocean data.
 export const api = {
   health: () => getJson<HealthResponse>("/health"),

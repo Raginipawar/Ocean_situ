@@ -29,7 +29,7 @@ const PUBLIC_MESSAGE: Record<TrustLabel, { title: string; body: string }> = {
   },
   red: {
     title: "Avoid",
-    body: "Real sensors disagree strongly with the forecast in part of this region — treat the forecast as unreliable there.",
+    body: "Real sensors disagree strongly with the forecast in part of this region. Treat the forecast as unreliable there.",
   },
 };
 
@@ -62,7 +62,7 @@ export function DigitalTwin() {
     fused?.points.filter((p) => p.is_sensor_node).map((p) => ({
       lat: p.lat,
       lon: p.lon,
-      label: `${p.sst_c?.toFixed(1) ?? "—"}°C`,
+      label: `${p.sst_c?.toFixed(1) ?? "N/A"}°C`,
       detail: `confidence ${Math.round(p.confidence * 100)}%`,
       color: TRUST_COLOR[p.trust_label],
     })) ?? [];
@@ -181,7 +181,7 @@ export function DigitalTwin() {
                 Sensor-anchored points ({markers.length})
               </h2>
               <p className="mt-1 text-xs opacity-40">
-                Trust scale — green ≥ {TRUST_GREEN_MIN * 100}%, amber ≥ {TRUST_AMBER_MIN * 100}%, red below.
+                Trust scale: green ≥ {TRUST_GREEN_MIN * 100}%, amber ≥ {TRUST_AMBER_MIN * 100}%, red below.
               </p>
               <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-2">
                 {fused.points
@@ -195,7 +195,7 @@ export function DigitalTwin() {
                       <span className="font-mono-data opacity-70">
                         {p.lat.toFixed(2)}, {p.lon.toFixed(2)}
                       </span>
-                      <span className="opacity-70">{p.sst_c?.toFixed(2) ?? "—"}°C</span>
+                      <span className="opacity-70">{p.sst_c?.toFixed(2) ?? "N/A"}°C</span>
                       <TrustBadge label={p.trust_label} confidence={p.confidence} />
                     </div>
                   ))}
@@ -207,7 +207,7 @@ export function DigitalTwin() {
             <h2 className="font-nav text-xs opacity-60">Live alert feed</h2>
             <p className="mt-3 text-sm opacity-60">
               Waiting on the Drift Memory Engine's <code className="font-mono-data">/alerts</code>{" "}
-              WebSocket — that track isn't wired into this API yet, so this panel intentionally
+              WebSocket. That track isn't wired into this API yet, so this panel intentionally
               shows nothing rather than a fabricated feed.
             </p>
           </div>

@@ -22,7 +22,7 @@ export const REGION_CENTER = {
 
 export const VARIABLES = ["sst_c", "current_u_ms", "current_v_ms", "wave_height_m"] as const;
 
-// TRUST_GREEN_MIN / TRUST_AMBER_MIN from config.py — confidence >= green is
+// TRUST_GREEN_MIN / TRUST_AMBER_MIN from config.py. Confidence >= green is
 // "green", >= amber is "amber", below that is "red". The backend computes
 // trust_label itself; these are only for rendering a legend, never for
 // re-deriving a label client-side.

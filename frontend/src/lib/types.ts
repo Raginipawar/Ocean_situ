@@ -1,6 +1,6 @@
 /**
  * Mirrors varuna-graph-fusion/src/graph_fusion/schemas.py exactly.
- * If the backend contract changes, update this file only — every component
+ * If the backend contract changes, update this file only. Every component
  * that talks to the API imports these types instead of redefining shapes.
  */
 

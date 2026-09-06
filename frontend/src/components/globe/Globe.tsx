@@ -1,8 +1,10 @@
-import { geoOrthographic, geoPath, geoGraticule10, geoDistance } from "d3-geo";
-import { feature, mesh } from "topojson-client";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { Topology, GeometryCollection } from "topojson-specification";
-import worldTopology from "../../assets/geo/countries-110m.json";
+import { OrbitControls, Line, Stars, useTexture } from "@react-three/drei";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
+import earthDayMap from "../../assets/textures/earth_daymap.jpg";
+import earthNightMap from "../../assets/textures/earth_nightmap.jpg";
+import earthCloudsMap from "../../assets/textures/earth_clouds.jpg";
 import { useTheme } from "../../theme/ThemeProvider";
 
 export interface GlobeMarker {
@@ -21,8 +23,7 @@ interface RegionBBox {
 }
 
 interface GlobeProps {
-  size?: number;
-  /** Geographic point the globe starts centred on. */
+  /** Geographic point the camera starts facing. */
   focus: { lat: number; lon: number };
   markers?: GlobeMarker[];
   /** Draws the real scope-lock bounding box from lib/config.ts as a highlighted outline. */
@@ -31,188 +32,192 @@ interface GlobeProps {
   onCenterChange?: (center: { lat: number; lon: number }) => void;
 }
 
-function bboxRing({ latMin, latMax, lonMin, lonMax }: RegionBBox, steps = 24) {
-  const coords: [number, number][] = [];
-  for (let i = 0; i <= steps; i++) coords.push([lonMin + ((lonMax - lonMin) * i) / steps, latMin]);
-  for (let i = 0; i <= steps; i++) coords.push([lonMax, latMin + ((latMax - latMin) * i) / steps]);
-  for (let i = 0; i <= steps; i++) coords.push([lonMax - ((lonMax - lonMin) * i) / steps, latMax]);
-  for (let i = 0; i <= steps; i++) coords.push([lonMin, latMax - ((latMax - latMin) * i) / steps]);
-  return { type: "Polygon" as const, coordinates: [coords] };
+const EARTH_RADIUS = 1;
+const CAMERA_DISTANCE = 3.1;
+
+/** Standard lat/lon -> sphere-surface conversion matching a default equirectangular map on a three.js SphereGeometry. */
+function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
+  const phi = (90 - lat) * (Math.PI / 180);
+  const theta = (lon + 180) * (Math.PI / 180);
+  return new THREE.Vector3(
+    -radius * Math.sin(phi) * Math.cos(theta),
+    radius * Math.cos(phi),
+    radius * Math.sin(phi) * Math.sin(theta),
+  );
 }
 
-const AUTO_ROTATE_DEG_PER_SEC = 3.2;
-const IDLE_RESUME_MS = 1800;
-
-function normalizeLon(lon: number): number {
-  let l = lon % 360;
-  if (l > 180) l -= 360;
-  if (l < -180) l += 360;
-  return l;
+function vector3ToLatLon(v: THREE.Vector3): { lat: number; lon: number } {
+  const r = v.length();
+  const phi = Math.acos(THREE.MathUtils.clamp(v.y / r, -1, 1));
+  const theta = Math.atan2(v.z, -v.x);
+  const rawLon = theta * (180 / Math.PI) - 180;
+  return {
+    lat: 90 - phi * (180 / Math.PI),
+    lon: ((rawLon + 180) % 360 + 360) % 360 - 180,
+  };
 }
 
-export function Globe({ size = 560, focus, markers = [], regionBBox, className, onCenterChange }: GlobeProps) {
-  const { theme } = useTheme();
-  const [rotation, setRotation] = useState<[number, number]>([-focus.lon, -focus.lat]);
-  const [isDragging, setIsDragging] = useState(false);
-  const draggingRef = useRef(false);
-  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
-  const lastInteractionRef = useRef(0);
-  const rafRef = useRef<number | null>(null);
+function bboxRingPoints(bbox: RegionBBox, radius: number, steps = 24): [number, number, number][] {
+  const { latMin, latMax, lonMin, lonMax } = bbox;
+  const ring: [number, number, number][] = [];
+  const push = (lat: number, lon: number) => {
+    const p = latLonToVector3(lat, lon, radius);
+    ring.push([p.x, p.y, p.z]);
+  };
+  for (let i = 0; i <= steps; i++) push(latMin, lonMin + ((lonMax - lonMin) * i) / steps);
+  for (let i = 0; i <= steps; i++) push(latMin + ((latMax - latMin) * i) / steps, lonMax);
+  for (let i = 0; i <= steps; i++) push(latMax, lonMax - ((lonMax - lonMin) * i) / steps);
+  for (let i = 0; i <= steps; i++) push(latMax - ((latMax - latMin) * i) / steps, lonMin);
+  return ring;
+}
 
-  const topology = worldTopology as unknown as Topology;
-  const land = useMemo(
-    () => feature(topology, topology.objects.land as GeometryCollection),
-    [topology],
-  );
-  const borders = useMemo(
-    () =>
-      mesh(topology, topology.objects.countries as GeometryCollection, (a, b) => a !== b),
-    [topology],
-  );
-  const graticule = useMemo(() => geoGraticule10(), []);
-  const bboxRingGeometry = useMemo(() => (regionBBox ? bboxRing(regionBBox) : null), [regionBBox]);
-
-  const projection = useMemo(
-    () =>
-      geoOrthographic()
-        .scale(size / 2.18)
-        .translate([size / 2, size / 2])
-        .rotate([rotation[0], rotation[1]])
-        .clipAngle(90),
-    [size, rotation],
-  );
-
-  const path = useMemo(() => geoPath(projection), [projection]);
+function EarthMesh() {
+  const [dayMap, nightMap, cloudsMap] = useTexture([earthDayMap, earthNightMap, earthCloudsMap]);
 
   useEffect(() => {
-    const center = { lat: -rotation[1], lon: normalizeLon(-rotation[0]) };
-    onCenterChange?.(center);
-  }, [rotation, onCenterChange]);
+    [dayMap, nightMap, cloudsMap].forEach((tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+    });
+  }, [dayMap, nightMap, cloudsMap]);
 
-  useEffect(() => {
-    let last = performance.now();
+  const cloudsRef = useRef<THREE.Mesh>(null);
 
-    function tick(now: number) {
-      const dt = (now - last) / 1000;
-      last = now;
-      const idle = now - lastInteractionRef.current > IDLE_RESUME_MS;
-      if (idle && !draggingRef.current) {
-        setRotation(([lambda, phi]) => [lambda + AUTO_ROTATE_DEG_PER_SEC * dt, phi]);
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    }
-
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!reduceMotion) {
-      rafRef.current = requestAnimationFrame(tick);
-    }
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, []);
-
-  function handlePointerDown(e: React.PointerEvent) {
-    draggingRef.current = true;
-    setIsDragging(true);
-    lastPointerRef.current = { x: e.clientX, y: e.clientY };
-    (e.target as Element).setPointerCapture(e.pointerId);
-  }
-
-  function handlePointerMove(e: React.PointerEvent) {
-    lastInteractionRef.current = performance.now();
-    if (!draggingRef.current || !lastPointerRef.current) return;
-    const dx = e.clientX - lastPointerRef.current.x;
-    const dy = e.clientY - lastPointerRef.current.y;
-    lastPointerRef.current = { x: e.clientX, y: e.clientY };
-    setRotation(([lambda, phi]) => [
-      lambda + dx * 0.35,
-      Math.max(-90, Math.min(90, phi - dy * 0.35)),
-    ]);
-  }
-
-  function handlePointerUp() {
-    draggingRef.current = false;
-    setIsDragging(false);
-    lastPointerRef.current = null;
-    lastInteractionRef.current = performance.now();
-  }
-
-  const isDark = theme === "dark";
-  const oceanFill = isDark ? "#0d1926" : "#dcebe8";
-  const landFill = isDark ? "#16222c" : "#c9dcd3";
-  const borderStroke = isDark ? "rgba(244,234,225,0.18)" : "rgba(20,17,15,0.22)";
-  const graticuleStroke = isDark ? "rgba(244,234,225,0.06)" : "rgba(20,17,15,0.08)";
+  useFrame((_, delta) => {
+    if (cloudsRef.current) cloudsRef.current.rotation.y += delta * 0.018;
+  });
 
   return (
-    <svg
-      viewBox={`0 0 ${size} ${size}`}
-      width={size}
-      height={size}
-      className={className}
-      role="img"
-      aria-label={`Rotating globe centred on ${focus.lat.toFixed(1)}, ${focus.lon.toFixed(1)}`}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
-      style={{ touchAction: "none", cursor: isDragging ? "grabbing" : "grab" }}
-    >
-      <defs>
-        <radialGradient id="globe-atmosphere" cx="50%" cy="42%" r="60%">
-          <stop offset="60%" stopColor="var(--color-accent)" stopOpacity="0" />
-          <stop offset="92%" stopColor="var(--color-accent)" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="var(--color-accent)" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={size / 2 - 2}
-        fill="none"
-        stroke="url(#globe-atmosphere)"
-        strokeWidth={14}
-      />
-
-      <path d={path({ type: "Sphere" }) ?? undefined} fill={oceanFill} />
-      <path d={path(graticule) ?? undefined} fill="none" stroke={graticuleStroke} strokeWidth={0.5} />
-      <path d={path(land) ?? undefined} fill={landFill} />
-      <path d={path(borders) ?? undefined} fill="none" stroke={borderStroke} strokeWidth={0.6} />
-      {bboxRingGeometry && (
-        <path
-          d={path(bboxRingGeometry) ?? undefined}
-          fill="var(--color-accent)"
-          fillOpacity={0.18}
-          stroke="var(--color-accent)"
-          strokeWidth={1.5}
+    <>
+      <mesh>
+        <sphereGeometry args={[EARTH_RADIUS, 64, 64]} />
+        <meshStandardMaterial
+          map={dayMap}
+          emissiveMap={nightMap}
+          emissive="#ffe9b3"
+          emissiveIntensity={0.35}
+          roughness={0.85}
+          metalness={0}
         />
-      )}
-      <path
-        d={path({ type: "Sphere" }) ?? undefined}
-        fill="none"
-        stroke="var(--color-accent)"
-        strokeOpacity={0.5}
-        strokeWidth={1}
-      />
+      </mesh>
+      <mesh ref={cloudsRef}>
+        <sphereGeometry args={[EARTH_RADIUS * 1.008, 64, 64]} />
+        <meshStandardMaterial map={cloudsMap} transparent opacity={0.35} depthWrite={false} />
+      </mesh>
+      <mesh>
+        <sphereGeometry args={[EARTH_RADIUS * 1.05, 32, 32]} />
+        <shaderMaterial
+          side={THREE.BackSide}
+          transparent
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          uniforms={{ glowColor: { value: new THREE.Color("#79a4c0") } }}
+          vertexShader={`
+            varying float intensity;
+            void main() {
+              vec3 viewDir = normalize(cameraPosition - (modelMatrix * vec4(position, 1.0)).xyz);
+              vec3 worldNormal = normalize(mat3(modelMatrix) * normal);
+              intensity = pow(0.62 - dot(worldNormal, viewDir), 3.2);
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `}
+          fragmentShader={`
+            varying float intensity;
+            uniform vec3 glowColor;
+            void main() {
+              gl_FragColor = vec4(glowColor, clamp(intensity, 0.0, 1.0));
+            }
+          `}
+        />
+      </mesh>
+    </>
+  );
+}
 
-      {markers.map((marker) => {
-        const dist = geoDistance([marker.lon, marker.lat], [-rotation[0], -rotation[1]]);
-        const visible = dist < Math.PI / 2;
-        const projected = projection([marker.lon, marker.lat]);
-        if (!visible || !projected) return null;
-        const [x, y] = projected;
-        const color = marker.color ?? "var(--color-accent)";
-        return (
-          <g key={`${marker.label}-${marker.lat}-${marker.lon}`} transform={`translate(${x}, ${y})`}>
-            <title>{marker.detail ? `${marker.label} — ${marker.detail}` : marker.label}</title>
-            <circle r={7} fill={color} opacity={0.25}>
-              <animate attributeName="r" values="4;11;4" dur="2.4s" repeatCount="indefinite" />
-              <animate attributeName="opacity" values="0.45;0;0.45" dur="2.4s" repeatCount="indefinite" />
-            </circle>
-            <circle r={3} fill={color} />
-          </g>
-        );
-      })}
-    </svg>
+function Marker({ marker }: { marker: GlobeMarker }) {
+  const haloRef = useRef<THREE.Mesh>(null);
+  const position = useMemo(
+    () => latLonToVector3(marker.lat, marker.lon, EARTH_RADIUS * 1.015),
+    [marker.lat, marker.lon],
+  );
+  const color = marker.color ?? "#79a4c0";
+
+  useFrame(({ clock }) => {
+    if (!haloRef.current) return;
+    const t = (clock.getElapsedTime() * 0.9) % 1;
+    haloRef.current.scale.setScalar(1 + t * 2.2);
+    (haloRef.current.material as THREE.MeshBasicMaterial).opacity = 0.5 * (1 - t);
+  });
+
+  return (
+    <group position={position}>
+      <mesh>
+        <sphereGeometry args={[0.014, 12, 12]} />
+        <meshBasicMaterial color={color} />
+      </mesh>
+      <mesh ref={haloRef}>
+        <sphereGeometry args={[0.014, 12, 12]} />
+        <meshBasicMaterial color={color} transparent opacity={0.5} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+}
+
+function CenterTracker({ onCenterChange }: { onCenterChange?: (c: { lat: number; lon: number }) => void }) {
+  const { camera } = useThree();
+  const lastReport = useRef(0);
+
+  useFrame(({ clock }) => {
+    if (!onCenterChange) return;
+    const t = clock.getElapsedTime();
+    if (t - lastReport.current < 0.12) return;
+    lastReport.current = t;
+    onCenterChange(vector3ToLatLon(camera.position));
+  });
+
+  return null;
+}
+
+export function Globe({ focus, markers = [], regionBBox, className, onCenterChange }: GlobeProps) {
+  const { theme } = useTheme();
+  const [initialCameraPosition] = useState(() => latLonToVector3(focus.lat, focus.lon, CAMERA_DISTANCE));
+  const bboxPoints = useMemo(
+    () => (regionBBox ? bboxRingPoints(regionBBox, EARTH_RADIUS * 1.006) : null),
+    [regionBBox],
+  );
+
+  return (
+    <div className={className} style={{ aspectRatio: "1 / 1", cursor: "grab" }}>
+      <Canvas camera={{ position: initialCameraPosition.toArray(), fov: 42 }} dpr={[1, 1.5]} performance={{ min: 0.5 }}>
+        <Suspense fallback={null}>
+          {theme === "dark" && (
+            <>
+              <color attach="background" args={["#000000"]} />
+              <Stars radius={80} depth={40} count={1200} factor={2} saturation={0} fade />
+            </>
+          )}
+          <ambientLight intensity={theme === "dark" ? 1.15 : 1.6} />
+          <directionalLight position={[5, 2, 5]} intensity={1.6} />
+          <EarthMesh />
+          {bboxPoints && <Line points={bboxPoints} color="#79a4c0" lineWidth={1.6} />}
+          {markers.map((marker) => (
+            <Marker key={`${marker.label}-${marker.lat}-${marker.lon}`} marker={marker} />
+          ))}
+          <CenterTracker onCenterChange={onCenterChange} />
+          <OrbitControls
+            target={[0, 0, 0]}
+            enableZoom={false}
+            enablePan={false}
+            autoRotate
+            autoRotateSpeed={0.35}
+            enableDamping
+            dampingFactor={0.08}
+            rotateSpeed={0.55}
+            minPolarAngle={Math.PI * 0.08}
+            maxPolarAngle={Math.PI * 0.92}
+          />
+        </Suspense>
+      </Canvas>
+    </div>
   );
 }
