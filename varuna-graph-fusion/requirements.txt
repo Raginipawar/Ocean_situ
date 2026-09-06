@@ -1,0 +1,23 @@
+# Exact versions verified working on Windows 11 + Python 3.14 (CPU-only, no GPU/CUDA needed).
+# Install with:
+#   pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+#
+# The --extra-index-url is only needed to resolve the "+cpu" torch build; every
+# other package comes from regular PyPI. On Linux/macOS the plain CPU wheel of
+# torch is the default anyway, so the same command works unchanged there too.
+
+numpy==2.5.2
+scipy==1.18.1
+networkx==3.6.1
+pandas==3.0.5
+
+torch==2.14.0+cpu
+torch-geometric==2.8.0.post1
+
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.5
+httpx==0.28.1
+
+pytest==9.1.1
+matplotlib==3.11.1

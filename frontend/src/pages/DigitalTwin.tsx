@@ -1,0 +1,218 @@
+import { useCallback, useEffect, useState } from "react";
+import { Globe, type GlobeMarker } from "../components/globe/Globe";
+import { CoordinateReadout } from "../components/CoordinateReadout";
+import { TrustBadge } from "../components/TrustBadge";
+import { api, ApiError } from "../lib/api";
+import { API_BASE_URL, REGION_CENTER, REGION_LABEL, TRUST_AMBER_MIN, TRUST_GREEN_MIN } from "../lib/config";
+import type { FusedResponse, TrustLabel } from "../lib/types";
+
+type ConnectionState = "checking" | "online" | "offline";
+type Mode = "expert" | "public";
+
+const TRUST_COLOR: Record<TrustLabel, string> = {
+  green: "var(--color-trust-green)",
+  amber: "var(--color-trust-amber)",
+  red: "var(--color-trust-red)",
+};
+
+function worstLabel(points: FusedResponse["points"]): TrustLabel {
+  if (points.some((p) => p.trust_label === "red")) return "red";
+  if (points.some((p) => p.trust_label === "amber")) return "amber";
+  return "green";
+}
+
+const PUBLIC_MESSAGE: Record<TrustLabel, { title: string; body: string }> = {
+  green: { title: "Safe", body: "The forecast matches real sensor readings across this region." },
+  amber: {
+    title: "Caution",
+    body: "Some readings in this region differ from the forecast. Check conditions before heading out.",
+  },
+  red: {
+    title: "Avoid",
+    body: "Real sensors disagree strongly with the forecast in part of this region — treat the forecast as unreliable there.",
+  },
+};
+
+export function DigitalTwin() {
+  const [connection, setConnection] = useState<ConnectionState>("checking");
+  const [fused, setFused] = useState<FusedResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [engine, setEngine] = useState<"auto" | "gnn" | "fallback">("auto");
+  const [mode, setMode] = useState<Mode>("expert");
+  const [center, setCenter] = useState(REGION_CENTER);
+
+  const load = useCallback(async (chosenEngine: "auto" | "gnn" | "fallback") => {
+    setError(null);
+    try {
+      await api.health();
+      setConnection("online");
+      const response = await api.fused(chosenEngine);
+      setFused(response);
+    } catch (err) {
+      setConnection("offline");
+      setError(err instanceof ApiError ? err.message : "Unexpected error reaching the backend.");
+    }
+  }, []);
+
+  useEffect(() => {
+    load(engine);
+  }, [engine, load]);
+
+  const markers: GlobeMarker[] =
+    fused?.points.filter((p) => p.is_sensor_node).map((p) => ({
+      lat: p.lat,
+      lon: p.lon,
+      label: `${p.sst_c?.toFixed(1) ?? "—"}°C`,
+      detail: `confidence ${Math.round(p.confidence * 100)}%`,
+      color: TRUST_COLOR[p.trust_label],
+    })) ?? [];
+
+  return (
+    <div className="mx-auto max-w-7xl px-6 py-28">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <p className="font-nav text-xs opacity-60">Live · {REGION_LABEL}</p>
+          <h1 className="font-display mt-2 text-4xl sm:text-5xl">Digital Twin</h1>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex rounded-full border p-1" style={{ borderColor: "var(--color-border)" }}>
+            {(["expert", "public"] as Mode[]).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className="font-nav rounded-full px-4 py-1.5 text-xs capitalize"
+                style={mode === m ? { backgroundColor: "var(--color-ink)", color: "var(--color-bg)" } : undefined}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+          <select
+            value={engine}
+            onChange={(e) => setEngine(e.target.value as typeof engine)}
+            className="font-nav rounded-full border bg-transparent px-4 py-1.5 text-xs"
+            style={{ borderColor: "var(--color-border)" }}
+          >
+            <option value="auto">Engine: auto</option>
+            <option value="gnn">Engine: GNN</option>
+            <option value="fallback">Engine: fallback</option>
+          </select>
+        </div>
+      </div>
+
+      {connection === "offline" && (
+        <div
+          className="mt-8 rounded-xl border px-5 py-4 text-sm"
+          style={{ borderColor: "var(--color-trust-red)", color: "var(--color-trust-red)" }}
+        >
+          Can't reach the Graph Fusion Engine at <code className="font-mono-data">{API_BASE_URL}</code>.
+          {" "}
+          {error} Run{" "}
+          <code className="font-mono-data">uvicorn graph_fusion.api:app --reload --port 8000</code>{" "}
+          from <code className="font-mono-data">varuna-graph-fusion/</code> and reload this page.
+        </div>
+      )}
+
+      <div className="mt-12 grid gap-12 lg:grid-cols-[1fr_1fr]">
+        <div className="flex flex-col items-center gap-4">
+          <Globe focus={REGION_CENTER} markers={markers} onCenterChange={setCenter} className="w-full max-w-[520px]" />
+          <CoordinateReadout label="Viewing" lat={center.lat} lon={center.lon} className="opacity-70" />
+          {fused && (
+            <div className="flex flex-wrap justify-center gap-4 text-xs opacity-70">
+              {(["green", "amber", "red"] as TrustLabel[]).map((label) => (
+                <span key={label} className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: TRUST_COLOR[label] }} />
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          {mode === "public" && fused && (
+            <div
+              className="rounded-2xl border p-8"
+              style={{ borderColor: TRUST_COLOR[worstLabel(fused.points)] }}
+            >
+              <h2 className="font-display text-3xl" style={{ color: TRUST_COLOR[worstLabel(fused.points)] }}>
+                {PUBLIC_MESSAGE[worstLabel(fused.points)].title}
+              </h2>
+              <p className="mt-3 text-sm opacity-80">{PUBLIC_MESSAGE[worstLabel(fused.points)].body}</p>
+              <p className="mt-4 font-mono-data text-xs opacity-50">
+                Based on {fused.points.length} fused grid points, {fused.summary.n_sensors} real
+                sensors, engine: {fused.summary.engine}.
+              </p>
+            </div>
+          )}
+
+          {mode === "expert" && fused && (
+            <div>
+              <h2 className="font-nav text-xs opacity-60">Fusion summary</h2>
+              <dl className="mt-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+                <div>
+                  <dt className="opacity-50">Engine</dt>
+                  <dd className="font-mono-data">{fused.summary.engine}</dd>
+                </div>
+                <div>
+                  <dt className="opacity-50">Sensors</dt>
+                  <dd className="font-mono-data">{fused.summary.n_sensors}</dd>
+                </div>
+                <div>
+                  <dt className="opacity-50">Grid points</dt>
+                  <dd className="font-mono-data">{fused.summary.n_grid_points}</dd>
+                </div>
+                <div>
+                  <dt className="opacity-50">Graph edges</dt>
+                  <dd className="font-mono-data">{fused.summary.n_graph_edges}</dd>
+                </div>
+                <div>
+                  <dt className="opacity-50">Mean confidence</dt>
+                  <dd className="font-mono-data">{Math.round(fused.summary.mean_confidence * 100)}%</dd>
+                </div>
+                <div>
+                  <dt className="opacity-50">Runtime</dt>
+                  <dd className="font-mono-data">{fused.summary.runtime_ms.toFixed(1)} ms</dd>
+                </div>
+              </dl>
+
+              <h2 className="font-nav mt-10 text-xs opacity-60">
+                Sensor-anchored points ({markers.length})
+              </h2>
+              <p className="mt-1 text-xs opacity-40">
+                Trust scale — green ≥ {TRUST_GREEN_MIN * 100}%, amber ≥ {TRUST_AMBER_MIN * 100}%, red below.
+              </p>
+              <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-2">
+                {fused.points
+                  .filter((p) => p.is_sensor_node)
+                  .map((p) => (
+                    <div
+                      key={`${p.lat}-${p.lon}`}
+                      className="flex items-center justify-between gap-3 border-b py-2 text-sm"
+                      style={{ borderColor: "var(--color-border)" }}
+                    >
+                      <span className="font-mono-data opacity-70">
+                        {p.lat.toFixed(2)}, {p.lon.toFixed(2)}
+                      </span>
+                      <span className="opacity-70">{p.sst_c?.toFixed(2) ?? "—"}°C</span>
+                      <TrustBadge label={p.trust_label} confidence={p.confidence} />
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-12 border-t pt-8" style={{ borderColor: "var(--color-border)" }}>
+            <h2 className="font-nav text-xs opacity-60">Live alert feed</h2>
+            <p className="mt-3 text-sm opacity-60">
+              Waiting on the Drift Memory Engine's <code className="font-mono-data">/alerts</code>{" "}
+              WebSocket — that track isn't wired into this API yet, so this panel intentionally
+              shows nothing rather than a fabricated feed.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

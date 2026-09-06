@@ -1,0 +1,9 @@
+# Large media not related to this project (see chat history) -- also over
+# GitHub's 100MB hard limit, would fail the push regardless.
+UI UX VUDEO.mp4
+
+# Stray pytest cache left at the repo root from running tests in the wrong dir
+.pytest_cache/
+
+.DS_Store
+Thumbs.db

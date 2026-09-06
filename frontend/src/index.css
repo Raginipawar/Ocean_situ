@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+/* Manual light/dark toggling (not just prefers-color-scheme) — see src/theme/ThemeProvider.tsx */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-display: "Big Shoulders Display", "Archivo Narrow", sans-serif;
+  --font-sans: "Archivo Expanded", "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "EB Garamond", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-trust-green: #1f8a5f;
+  --color-trust-amber: #b9770e;
+  --color-trust-red: #c1402f;
+}
+
+:root {
+  --color-bg: #f4eae1;
+  --color-bg-raised: #ffffff;
+  --color-ink: #14110f;
+  --color-ink-muted: #5c554d;
+  --color-border: rgb(20 17 15 / 0.12);
+  --color-accent: #0f6e63;
+  --color-accent-2: #143a5c;
+  --color-trust-green: #1f8a5f;
+  --color-trust-amber: #b9770e;
+  --color-trust-red: #c1402f;
+  color-scheme: light;
+}
+
+.dark {
+  --color-bg: #06090c;
+  --color-bg-raised: #0d1319;
+  --color-ink: #f4eae1;
+  --color-ink-muted: #9aa3ab;
+  --color-border: rgb(244 234 225 / 0.14);
+  --color-accent: #35b8a6;
+  --color-accent-2: #5c9be0;
+  --color-trust-green: #3ddc97;
+  --color-trust-amber: #f2b134;
+  --color-trust-red: #ef5350;
+  color-scheme: dark;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-serif);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+.font-nav {
+  font-family: var(--font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.font-mono-data {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hero gradient wash — our translation of richardsancho.com's click-triggered
+   WebGL colour wash into something that reads instantly on an official/gov
+   facing site: a slow-drifting ocean teal → navy mesh instead of a gimmick
+   that depends on visitor interaction to appear. */
+.gradient-wash {
+  background-image: radial-gradient(circle at 20% 20%, color-mix(in oklab, var(--color-accent) 35%, transparent), transparent 55%),
+    radial-gradient(circle at 80% 30%, color-mix(in oklab, var(--color-accent-2) 30%, transparent), transparent 60%),
+    radial-gradient(circle at 50% 90%, color-mix(in oklab, var(--color-accent) 20%, transparent), transparent 55%);
+  background-size: 180% 180%;
+  animation: wash-drift 22s ease-in-out infinite;
+}
+
+@keyframes wash-drift {
+  0%, 100% { background-position: 0% 0%, 100% 0%, 50% 100%; }
+  50% { background-position: 20% 30%, 80% 40%, 40% 80%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gradient-wash {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
