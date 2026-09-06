@@ -23,12 +23,15 @@ Switch via environment variables (see config.SourceConfig):
 from __future__ import annotations
 
 import abc
+import logging
 
 import httpx
 
 from . import config, mock_data
 from .ingest import parse_model_snapshot, parse_observation_snapshot
 from .schemas import ModelSnapshot, ObservationSnapshot
+
+logger = logging.getLogger("graph_fusion.adapters")
 
 
 class ModelSource(abc.ABC):
@@ -123,11 +126,40 @@ class HTTPObservationSource(ObservationSource):
         return parse_observation_snapshot(response.json())
 
 
+class FallbackModelSource(ModelSource):
+    """
+    Tries `primary`; on ANY exception, logs a warning and silently returns
+    `fallback`'s data instead of raising -- same "never cut the core loop"
+    philosophy as FusionService's GNN-to-graph-weighted-fallback degrade.
+
+    Used to wrap ModelPipelineSource: a live jury demo should never go down
+    because a teammate's real-data pipeline hit an edge case. Mock data
+    (always available, deterministic, fast) is a strictly better failure
+    mode than a broken page.
+    """
+
+    def __init__(self, primary: ModelSource, fallback: ModelSource):
+        self.primary = primary
+        self.fallback = fallback
+
+    def fetch(self) -> ModelSnapshot:
+        try:
+            return self.primary.fetch()
+        except Exception as exc:  # noqa: BLE001 - deliberate, see class docstring
+            logger.warning(
+                "Primary model source (%s) failed (%s); falling back to %s.",
+                type(self.primary).__name__,
+                exc,
+                type(self.fallback).__name__,
+            )
+            return self.fallback.fetch()
+
+
 def get_model_source() -> ModelSource:
     if config.SOURCES.model_source == "http":
         return HTTPModelSource()
     if config.SOURCES.model_source == "pipeline":
-        return ModelPipelineSource()
+        return FallbackModelSource(primary=ModelPipelineSource(), fallback=MockModelSource())
     return MockModelSource()
 
 
