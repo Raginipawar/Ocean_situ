@@ -119,7 +119,7 @@ TRUST_AMBER_MIN = 0.4
 
 @dataclass(frozen=True)
 class SourceConfig:
-    # "mock" | "http"
+    # "mock" | "http" | "pipeline" (Person 4's varuna_model_pipeline, in-process)
     model_source: str = os.getenv("VARUNA_MODEL_SOURCE", "mock")
     model_source_url: str = os.getenv("VARUNA_MODEL_SOURCE_URL", "http://localhost:8000/model")
     observation_source: str = os.getenv("VARUNA_OBS_SOURCE", "mock")

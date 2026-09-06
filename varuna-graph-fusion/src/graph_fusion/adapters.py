@@ -1,16 +1,22 @@
 """
 Adapter pattern for /model and /observations data sources.
 
-Day 1-2 of the sprint plan, this package only has mock data. Day 3, Person 4's
-real ingestion pipeline lands behind a real /model endpoint and Person 6's
-behind a real /observations endpoint. Swapping from mock to real is meant to
-be a one-line change here -- not a rewrite of graph_builder.py, the engines,
-or the API routes, all of which only ever talk to `ModelSource`/
-`ObservationSource`, never to mock_data or httpx directly.
+Day 1-2 of the sprint plan, this package only had mock data. Person 6's real
+ingestion pipeline is meant to land behind a real /observations HTTP endpoint
+(see HTTPObservationSource). Person 4's turned out to ship as an in-process
+Python library (`varuna_model_pipeline`, checked in at ../model-pipeline)
+rather than its own server -- ModelPipelineSource below calls it directly in
+the same interpreter, no network hop, which is actually preferable for a live
+demo (one fewer process that can fall over on stage). Either way, swapping
+sources is a one-line env var change here -- not a rewrite of
+graph_builder.py, the engines, or the API routes, all of which only ever talk
+to `ModelSource`/`ObservationSource`, never to mock_data, httpx, or
+varuna_model_pipeline directly.
 
 Switch via environment variables (see config.SourceConfig):
-    VARUNA_MODEL_SOURCE=http
-    VARUNA_MODEL_SOURCE_URL=http://<person4-host>:8000/model
+    VARUNA_MODEL_SOURCE=pipeline           # Person 4's model-pipeline, in-process
+    VARUNA_MODEL_SOURCE=http                # or: a real /model HTTP endpoint
+    VARUNA_MODEL_SOURCE_URL=http://<host>:8000/model
     VARUNA_OBS_SOURCE=http
     VARUNA_OBS_SOURCE_URL=http://<person6-host>:8000/observations
 """
@@ -58,6 +64,52 @@ class HTTPModelSource(ModelSource):
         return parse_model_snapshot(response.json())
 
 
+class ModelPipelineSource(ModelSource):
+    """
+    Calls Person 4's `varuna_model_pipeline` package in-process.
+
+    Its `ModelSnapshot`/`ModelGridPoint` (in `api_contract.py`) mirror ours
+    field-for-field on purpose (their README says as much), so a
+    `.model_dump()` round-trip is all the translation needed -- no manual
+    field mapping to keep in sync.
+
+    `use_local_demo=True` by default: real INCOIS LAS / GLORYS ingestion
+    needs actual source files/credentials this environment doesn't have.
+    Pass real `primary_path`/`fallback_path` once those exist -- the
+    pipeline's own source-selection logic (LOCAL_DEMO as last-resort
+    fallback) is unchanged either way.
+
+    Note: their local-demo pipeline run takes several seconds (regridding a
+    synthetic base grid), not milliseconds -- this is exactly what
+    FusionService's content-hash cache is for. A demo hitting `/fused`
+    repeatedly against unchanged upstream data pays that cost once, not
+    per request.
+    """
+
+    def __init__(self, use_local_demo: bool = True, primary_path: str | None = None, fallback_path: str | None = None):
+        self.use_local_demo = use_local_demo
+        self.primary_path = primary_path
+        self.fallback_path = fallback_path
+
+    def fetch(self) -> ModelSnapshot:
+        try:
+            from varuna_model_pipeline.api_contract import to_model_snapshot
+            from varuna_model_pipeline.pipeline import prepare_model_dataset
+        except ImportError as exc:  # pragma: no cover - environment-dependent
+            raise RuntimeError(
+                "varuna_model_pipeline isn't installed. From varuna-graph-fusion/: "
+                "pip install -e ../model-pipeline"
+            ) from exc
+
+        result = prepare_model_dataset(
+            primary_path=self.primary_path,
+            fallback_path=self.fallback_path,
+            use_local_demo=self.use_local_demo,
+        )
+        their_snapshot = to_model_snapshot(result.dataset)
+        return ModelSnapshot.model_validate(their_snapshot.model_dump())
+
+
 class HTTPObservationSource(ObservationSource):
     """Talks to Person 6's real /observations endpoint."""
 
@@ -74,6 +126,8 @@ class HTTPObservationSource(ObservationSource):
 def get_model_source() -> ModelSource:
     if config.SOURCES.model_source == "http":
         return HTTPModelSource()
+    if config.SOURCES.model_source == "pipeline":
+        return ModelPipelineSource()
     return MockModelSource()
 
 
