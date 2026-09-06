@@ -99,6 +99,11 @@ export function About() {
             rotation={-6}
             duration={38}
             responsive
+            centerContent={
+              <p className="font-nav max-w-[10rem] text-center text-[11px] opacity-60">
+                Six real sources, one ocean
+              </p>
+            }
           />
         </div>
         <p className="mt-6 text-center text-[11px] opacity-50">
