@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "varuna-model-pipeline"
+version = "0.1.0"
+description = "VARUNA ocean model data pipeline: source config, canonical schema, validation, and future NetCDF processing"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.0",
+    "xarray>=2024.1",
+    "netCDF4>=1.6",
+    "h5netcdf>=1.3",
+    "scipy>=1.11",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

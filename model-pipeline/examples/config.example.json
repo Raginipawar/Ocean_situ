@@ -1,0 +1,23 @@
+{
+  "primary_source": "INCOIS_LAS",
+  "fallback_source": "COPERNICUS_GLORYS",
+  "demo_source": "LOCAL_DEMO",
+  "region": {
+    "name": "bay_of_bengal",
+    "lat_min": 5.0,
+    "lat_max": 22.0,
+    "lon_min": 80.0,
+    "lon_max": 100.0
+  },
+  "target_grid": {
+    "resolution_deg": 1.0,
+    "method": "linear"
+  },
+  "time_range": {
+    "start": null,
+    "end": null
+  },
+  "missing_value_policy": "preserve_nan",
+  "output_format": "xarray_dataset_plus_model_snapshot_json"
+}
+
