@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VARUNA — Ocean Digital Twin (Dev Stub)</title>
+
+  <!-- ─── CesiumJS CDN ─────────────────────────────────────────── -->
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Cesium.js"></script>
+  <link  href="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+
+  <style>
+    /* ── reset ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0a0f1a;
+      color: #e0e8f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── top bar ────────────────────────────────────────────────── */
+    #topbar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 20px;
+      background: rgba(10,15,26,0.92);
+      border-bottom: 1px solid rgba(0,200,255,0.15);
+      z-index: 10;
+      flex-shrink: 0;
+    }
+    #topbar h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: #00d4ff;
+    }
+    #topbar h1 span { color: #7ecfff; font-weight: 400; font-size: 0.85rem; margin-left: 6px; }
+
+    #status-badge {
+      font-size: 0.72rem;
+      padding: 3px 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.08);
+      color: #aac;
+      transition: background 0.3s, color 0.3s;
+    }
+    #status-badge.ok        { background: rgba(0,230,118,0.18); color: #00e676; }
+    #status-badge.loading   { background: rgba(255,179,0,0.15);  color: #ffb300; }
+    #status-badge.error     { background: rgba(255,23,68,0.15);  color: #ff5252; }
+
+    .topbar-info { font-size: 0.72rem; color: #7a9bb5; margin-left: auto; }
+
+    /* ── main layout ────────────────────────────────────────────── */
+    #layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── globe ──────────────────────────────────────────────────── */
+    #cesiumContainer {
+      flex: 1;
+      position: relative;
+    }
+
+    /* ── right panel ────────────────────────────────────────────── */
+    #panel {
+      width: 320px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: rgba(8,13,24,0.97);
+      border-left: 1px solid rgba(0,200,255,0.1);
+      overflow: hidden;
+    }
+
+    /* ── alert feed ─────────────────────────────────────────────── */
+    #alert-header {
+      padding: 12px 16px 8px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      color: #00d4ff;
+      text-transform: uppercase;
+      border-bottom: 1px solid rgba(0,200,255,0.1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #ws-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #444;
+      transition: background 0.4s;
+      flex-shrink: 0;
+    }
+    #ws-dot.connected  { background: #00e676; box-shadow: 0 0 6px #00e676; }
+    #ws-dot.error      { background: #ff5252; }
+
+    #alert-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+      scroll-behavior: smooth;
+    }
+    #alert-list::-webkit-scrollbar { width: 4px; }
+    #alert-list::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.2); border-radius: 2px; }
+
+    .alert-item {
+      padding: 10px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      animation: slide-in 0.25s ease-out;
+    }
+    .alert-item:last-child { border-bottom: none; }
+
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateX(12px); }
+      to   { opacity: 1; transform: translateX(0);    }
+    }
+
+    .alert-severity {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-bottom: 5px;
+    }
+    .alert-severity.warning  { background: rgba(255,179,0,0.18);  color: #ffb300; }
+    .alert-severity.critical { background: rgba(255,23,68,0.18);  color: #ff5252; }
+    .alert-severity.info     { background: rgba(0,200,255,0.12);  color: #00d4ff; }
+
+    .alert-msg  { font-size: 0.78rem; color: #c8d8e8; line-height: 1.4; }
+    .alert-meta { font-size: 0.65rem; color: #556677; margin-top: 4px; }
+
+    /* ── stats panel ────────────────────────────────────────────── */
+    #stats {
+      padding: 12px 16px;
+      border-top: 1px solid rgba(0,200,255,0.1);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 0.7rem;
+    }
+    .stat-box {
+      background: rgba(255,255,255,0.04);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    .stat-label { color: #5a7a8a; margin-bottom: 2px; }
+    .stat-value { color: #00d4ff; font-weight: 700; font-size: 0.82rem; }
+
+    /* ── filter bar ─────────────────────────────────────────────── */
+    #filter-bar {
+      padding: 10px 16px;
+      border-top: 1px solid rgba(0,200,255,0.08);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    #filter-bar button {
+      font-size: 0.68rem;
+      padding: 4px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(0,200,255,0.2);
+      background: rgba(0,200,255,0.06);
+      color: #7ecfff;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #filter-bar button:hover,
+    #filter-bar button.active {
+      background: rgba(0,200,255,0.18);
+      color: #fff;
+    }
+
+    /* ── inspect tooltip ────────────────────────────────────────── */
+    #tooltip {
+      position: absolute;
+      bottom: 60px;
+      left: 20px;
+      background: rgba(8,13,24,0.92);
+      border: 1px solid rgba(0,200,255,0.2);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 0.75rem;
+      color: #c8d8e8;
+      pointer-events: none;
+      display: none;
+      z-index: 20;
+      min-width: 200px;
+      line-height: 1.6;
+    }
+    #tooltip .tt-title { color: #00d4ff; font-weight: 700; margin-bottom: 6px; }
+  </style>
+</head>
+
+<body>
+
+<!-- ── Top bar ────────────────────────────────────────────────────── -->
+<div id="topbar">
+  <h1>VARUNA <span>Ocean Digital Twin — Dev Stub</span></h1>
+  <div id="status-badge" class="loading">Loading…</div>
+  <div class="topbar-info">Bay of Bengal · <span id="data-time">—</span></div>
+</div>
+
+<!-- ── Main layout ────────────────────────────────────────────────── -->
+<div id="layout">
+
+  <!-- Globe -->
+  <div id="cesiumContainer">
+    <div id="tooltip"></div>
+  </div>
+
+  <!-- Right panel -->
+  <div id="panel">
+    <div id="alert-header">
+      <div id="ws-dot"></div>
+      Live Alert Feed
+    </div>
+
+    <div id="alert-list">
+      <div class="alert-item">
+        <div class="alert-meta">Connecting to alert stream…</div>
+      </div>
+    </div>
+
+    <div id="filter-bar">
+      <button class="active" data-sev="">All</button>
+      <button data-sev="warning">Warning+</button>
+      <button data-sev="critical">Critical</button>
+    </div>
+
+    <div id="stats">
+      <div class="stat-box">
+        <div class="stat-label">Grid Points</div>
+        <div class="stat-value" id="stat-points">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Sensors</div>
+        <div class="stat-value" id="stat-sensors">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Mean Confidence</div>
+        <div class="stat-value" id="stat-conf">—</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Engine</div>
+        <div class="stat-value" id="stat-engine">—</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+
+// ── Config ────────────────────────────────────────────────────────────
+const API_BASE = "http://localhost:8000";
+const WS_URL   = "ws://localhost:8000/ws/alerts";
+
+// CesiumJS Ion token — use the community token for dev stubs.
+// Replace with a real token from https://cesium.com/ion/tokens for production.
+Cesium.Ion.defaultAccessToken =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9." +
+  "eyJqdGkiOiJlYWE1OWIzOS02NWEyLTRkNDYtYTllOS1jZTc5NDZjOTcxMmQiLCJpZCI6MjU5MDI0LCJpYXQiOjE3MzMzMjQ1NTh9." +
+  "placeholder_replace_with_real_token";
+
+// ── Globe init ────────────────────────────────────────────────────────
+const viewer = new Cesium.Viewer("cesiumContainer", {
+  // Use OSM for base imagery (no token needed)
+  imageryProvider: new Cesium.OpenStreetMapImageryProvider({
+    url: "https://tile.openstreetmap.org/",
+  }),
+  baseLayerPicker:      false,
+  geocoder:             false,
+  homeButton:           false,
+  sceneModePicker:      true,
+  navigationHelpButton: false,
+  animation:            false,
+  timeline:             false,
+  fullscreenButton:     false,
+  infoBox:              true,
+  selectionIndicator:   true,
+  terrainProvider:      new Cesium.EllipsoidTerrainProvider(), // flat ocean (no terrain)
+});
+
+// Remove default credits bar (optional, uncomment for demo cleanliness)
+// viewer.cesiumWidget.creditContainer.style.display = "none";
+
+// Centre camera on Bay of Bengal
+viewer.camera.flyTo({
+  destination: Cesium.Cartesian3.fromDegrees(
+    90.0,   // lon — centre of BoB
+    13.0,   // lat
+    3_200_000 // altitude in metres (~3200 km)
+  ),
+  duration: 1.5,
+});
+
+
+// ── State ─────────────────────────────────────────────────────────────
+let fusedDataSource = null;     // Cesium DataSource holding grid points
+let wsMinSeverity   = "";       // current severity filter for WS
+let wsSocket        = null;
+let alertCount      = 0;
+
+
+// ── Utilities ─────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function setStatus(text, cls) {
+  const el = $("status-badge");
+  el.textContent = text;
+  el.className = cls;            // "ok" | "loading" | "error"
+}
+
+function trustColor(hex) {
+  // Parse "#rrggbb" → Cesium.Color
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return new Cesium.Color(r, g, b, 0.85);
+}
+
+function formatTime(isoStr) {
+  if (!isoStr) return "—";
+  try {
+    return new Date(isoStr).toLocaleTimeString("en-IN", {
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+  } catch { return isoStr; }
+}
+
+function severityClass(sev) {
+  return ["warning", "critical", "info"].includes(sev) ? sev : "info";
+}
+
+
+// ── 1. Fetch GeoJSON and plot on globe ────────────────────────────────
+async function loadFusedGeoJSON() {
+  setStatus("Loading grid…", "loading");
+
+  let geojson;
+  try {
+    const res = await fetch(`${API_BASE}/api/fused/geojson`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    geojson = await res.json();
+  } catch (err) {
+    console.error("[VARUNA] GeoJSON fetch failed:", err);
+    setStatus("Data error", "error");
+    return;
+  }
+
+  // ── Update stats panel ─────────────────────────────────────────────
+  const meta = geojson.varuna || {};
+  $("stat-points").textContent  = meta.n_grid_points  ?? geojson.features?.length ?? "—";
+  $("stat-sensors").textContent = meta.n_sensors      ?? "—";
+  $("stat-conf").textContent    = meta.mean_confidence != null
+    ? (meta.mean_confidence * 100).toFixed(1) + "%"
+    : "—";
+  $("stat-engine").textContent  = meta.engine         ?? "—";
+  $("data-time").textContent    = formatTime(meta.time);
+
+  // ── Remove previous data source ────────────────────────────────────
+  if (fusedDataSource) {
+    viewer.dataSources.remove(fusedDataSource, true);
+  }
+
+  // ── Build a GeoJSON DataSource ─────────────────────────────────────
+  // We use Cesium.GeoJsonDataSource but customise each entity afterwards
+  // to carry trust-overlay colours and click tooltips.
+  try {
+    fusedDataSource = await Cesium.GeoJsonDataSource.load(geojson, {
+      // We'll override colours per-entity below
+      markerColor: Cesium.Color.CYAN,
+      stroke:      Cesium.Color.WHITE,
+      fill:        Cesium.Color.CYAN.withAlpha(0.4),
+    });
+
+    await viewer.dataSources.add(fusedDataSource);
+
+    // ── Customise per-entity appearance ───────────────────────────────
+    const entities = fusedDataSource.entities.values;
+    let sensorCount = 0;
+
+    for (const entity of entities) {
+      const props = entity.properties;
+      const color  = props._color?.getValue()  ?? "#90a4ae";
+      const isSensor = props._is_sensor?.getValue() ?? false;
+      const sst      = props.sst_c?.getValue();
+      const conf     = props.confidence?.getValue();
+      const trust    = props.trust_label?.getValue() ?? "amber";
+      const u        = props.current_u_ms?.getValue();
+      const v        = props.current_v_ms?.getValue();
+      const wave     = props.wave_height_m?.getValue();
+
+      if (isSensor) sensorCount++;
+
+      // Point colour = trust overlay colour, size = sensor marker bigger
+      entity.point = new Cesium.PointGraphics({
+        color:       trustColor(color),
+        pixelSize:   isSensor ? 10 : 6,
+        outlineColor: isSensor
+          ? Cesium.Color.WHITE.withAlpha(0.9)
+          : Cesium.Color.TRANSPARENT,
+        outlineWidth: isSensor ? 1.5 : 0,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      });
+
+      // Rich description for the infoBox (click-to-inspect)
+      entity.description = `
+        <div style="font-family:system-ui;font-size:13px;color:#cdd;padding:4px">
+          <h3 style="color:#00d4ff;margin-bottom:8px">
+            ${isSensor ? "📡 Sensor Node" : "🌊 Grid Point"}
+          </h3>
+          <table style="border-collapse:collapse;width:100%">
+            <tr><td style="color:#7a9">SST</td>
+                <td style="text-align:right"><b>${sst != null ? sst.toFixed(2) + " °C" : "—"}</b></td></tr>
+            <tr><td style="color:#7a9">Confidence</td>
+                <td style="text-align:right"><b>${conf != null ? (conf*100).toFixed(1) + "%" : "—"}
+                  <span style="color:${color}"> ●</span></b></td></tr>
+            <tr><td style="color:#7a9">Trust</td>
+                <td style="text-align:right"><b style="color:${color}">${trust.toUpperCase()}</b></td></tr>
+            <tr><td style="color:#7a9">Current u</td>
+                <td style="text-align:right"><b>${u != null ? u.toFixed(3) + " m/s" : "—"}</b></td></tr>
+            <tr><td style="color:#7a9">Current v</td>
+                <td style="text-align:right"><b>${v != null ? v.toFixed(3) + " m/s" : "—"}</b></td></tr>
+            <tr><td style="color:#7a9">Wave Ht</td>
+                <td style="text-align:right"><b>${wave != null ? wave.toFixed(2) + " m" : "—"}</b></td></tr>
+          </table>
+        </div>`;
+    }
+
+    console.info(`[VARUNA] Plotted ${entities.length} grid points (${sensorCount} sensors)`);
+    setStatus(`${entities.length} pts loaded`, "ok");
+
+  } catch (err) {
+    console.error("[VARUNA] DataSource load failed:", err);
+    setStatus("Render error", "error");
+  }
+}
+
+
+// ── 2. WebSocket alert stream ─────────────────────────────────────────
+
+function addAlertToPanel(alert) {
+  const list = $("alert-list");
+
+  // Remove placeholder "connecting…" item on first real alert
+  const placeholder = list.querySelector(".alert-item .alert-meta");
+  if (placeholder && placeholder.textContent.includes("Connecting")) {
+    list.innerHTML = "";
+  }
+
+  const sev    = alert.severity ?? "info";
+  const ts     = formatTime(alert.timestamp);
+  const diverg = alert.divergence != null
+    ? ` (Δ ${alert.divergence.toFixed(2)})`
+    : "";
+
+  const item = document.createElement("div");
+  item.className = "alert-item";
+  item.innerHTML = `
+    <span class="alert-severity ${severityClass(sev)}">${sev.toUpperCase()}</span>
+    <div class="alert-msg">${alert.message}</div>
+    <div class="alert-meta">${ts}${diverg} &nbsp;·&nbsp; id: ${alert.id ?? "?"}</div>`;
+
+  // Prepend: newest alert at top
+  list.insertBefore(item, list.firstChild);
+
+  // Cap at 50 items
+  while (list.children.length > 50) {
+    list.removeChild(list.lastChild);
+  }
+
+  alertCount++;
+}
+
+function connectWebSocket() {
+  const dot = $("ws-dot");
+  dot.className = "";
+
+  try {
+    wsSocket = new WebSocket(WS_URL);
+  } catch (err) {
+    console.error("[VARUNA WS] Cannot open:", err);
+    dot.className = "error";
+    setTimeout(connectWebSocket, 5000);
+    return;
+  }
+
+  wsSocket.onopen = () => {
+    console.info("[VARUNA WS] Connected");
+    dot.className = "connected";
+
+    // Apply current severity filter
+    if (wsMinSeverity) {
+      wsSocket.send(JSON.stringify({
+        action: "filter",
+        min_severity: wsMinSeverity,
+      }));
+    }
+  };
+
+  wsSocket.onmessage = (event) => {
+    let msg;
+    try { msg = JSON.parse(event.data); }
+    catch { console.warn("[VARUNA WS] Non-JSON message:", event.data); return; }
+
+    console.log("[VARUNA WS]", msg.type, msg);
+
+    switch (msg.type) {
+
+      case "connection_ack":
+        console.info("[VARUNA WS] ACK:", msg.payload?.message);
+        break;
+
+      case "alert": {
+        const alerts = Array.isArray(msg.payload) ? msg.payload : [msg.payload];
+        alerts.forEach(a => {
+          addAlertToPanel(a);
+
+          // Also highlight the alert location on the globe
+          if (a.lat != null && a.lon != null) {
+            const color = {
+              critical: Cesium.Color.RED.withAlpha(0.85),
+              warning:  Cesium.Color.ORANGE.withAlpha(0.8),
+              info:     Cesium.Color.CYAN.withAlpha(0.7),
+            }[a.severity] ?? Cesium.Color.YELLOW.withAlpha(0.7);
+
+            viewer.entities.add({
+              name: a.id ?? "alert",
+              position: Cesium.Cartesian3.fromDegrees(a.lon, a.lat, 5000),
+              point: {
+                color,
+                pixelSize:   14,
+                outlineColor: Cesium.Color.WHITE.withAlpha(0.9),
+                outlineWidth: 2,
+                heightReference: Cesium.HeightReference.NONE,
+                scaleByDistance: new Cesium.NearFarScalar(1e4, 1.5, 1e7, 0.5),
+              },
+              label: {
+                text:            a.severity.toUpperCase(),
+                font:            "bold 11px sans-serif",
+                fillColor:       Cesium.Color.WHITE,
+                outlineColor:    Cesium.Color.BLACK,
+                outlineWidth:    2,
+                style:           Cesium.LabelStyle.FILL_AND_OUTLINE,
+                pixelOffset:     new Cesium.Cartesian2(0, -20),
+                heightReference: Cesium.HeightReference.NONE,
+                scaleByDistance: new Cesium.NearFarScalar(1e4, 1.0, 1e7, 0.3),
+              },
+              description: `
+                <div style="font-size:13px;color:#cdd;padding:4px">
+                  <b style="color:#ff5252">${a.severity?.toUpperCase()} ALERT</b><br/>
+                  ${a.message}<br/><br/>
+                  Model: <b>${a.model_value}</b><br/>
+                  Observed: <b>${a.observed_value}</b><br/>
+                  Divergence: <b style="color:#ff9800">${a.divergence?.toFixed(3)}</b>
+                </div>`,
+            });
+          }
+        });
+        break;
+      }
+
+      case "heartbeat":
+        console.debug("[VARUNA WS] Heartbeat", msg.payload);
+        break;
+
+      case "error":
+        console.warn("[VARUNA WS] Server error:", msg.payload?.message);
+        break;
+
+      default:
+        console.warn("[VARUNA WS] Unknown message type:", msg.type);
+    }
+  };
+
+  wsSocket.onclose = (ev) => {
+    console.warn(`[VARUNA WS] Closed (code=${ev.code}). Reconnecting in 5s…`);
+    dot.className = "error";
+    wsSocket = null;
+    setTimeout(connectWebSocket, 5000);
+  };
+
+  wsSocket.onerror = (err) => {
+    console.error("[VARUNA WS] Error:", err);
+    dot.className = "error";
+  };
+}
+
+
+// ── 3. Severity filter buttons ────────────────────────────────────────
+document.querySelectorAll("#filter-bar button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#filter-bar button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    wsMinSeverity = btn.dataset.sev;
+
+    // Send filter command to server if connected
+    if (wsSocket && wsSocket.readyState === WebSocket.OPEN) {
+      wsSocket.send(JSON.stringify({
+        action: "filter",
+        min_severity: wsMinSeverity || undefined,
+      }));
+    }
+  });
+});
+
+
+// ── 4. Click-to-inspect hover tooltip ────────────────────────────────
+const tooltip   = $("tooltip");
+const handler   = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+handler.setInputAction((movement) => {
+  const picked = viewer.scene.pick(movement.endPosition);
+  if (!Cesium.defined(picked) || !picked.id) {
+    tooltip.style.display = "none";
+    return;
+  }
+
+  const props = picked.id.properties;
+  if (!props) { tooltip.style.display = "none"; return; }
+
+  const sst   = props.sst_c?.getValue();
+  const trust = props.trust_label?.getValue();
+  const conf  = props.confidence?.getValue();
+  const color = props._color?.getValue() ?? "#90a4ae";
+
+  if (!sst && !trust) { tooltip.style.display = "none"; return; }
+
+  tooltip.style.display = "block";
+  tooltip.innerHTML = `
+    <div class="tt-title">${props._is_sensor?.getValue() ? "Sensor Node" : "Grid Point"}</div>
+    SST: <b>${sst != null ? sst.toFixed(2) + " °C" : "—"}</b><br/>
+    Trust: <b style="color:${color}">${trust?.toUpperCase() ?? "—"}</b>
+      (${conf != null ? (conf*100).toFixed(1)+"%" : "—"})<br/>
+    Wave Ht: <b>${props.wave_height_m?.getValue()?.toFixed(2) ?? "—"} m</b>
+  `;
+}, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+handler.setInputAction(() => {
+  tooltip.style.display = "none";
+}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+
+// ── 5. Auto-refresh grid every 60 seconds ────────────────────────────
+async function startRefreshLoop() {
+  await loadFusedGeoJSON();
+  setInterval(loadFusedGeoJSON, 60_000);
+}
+
+
+// ── Boot ──────────────────────────────────────────────────────────────
+(async () => {
+  startRefreshLoop();
+  connectWebSocket();
+})();
+</script>
+</body>
+</html>

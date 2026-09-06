@@ -1,9 +1,172 @@
-# Large media not related to this project (see chat history) -- also over
-# GitHub's 100MB hard limit, would fail the push regardless.
+# ══════════════════════════════════════════════════════════════════
+#  VARUNA — root .gitignore
+# ══════════════════════════════════════════════════════════════════
+
+# ── Planning & internal docs (not for the repo) ───────────────────
+sarvesh_work_plan.md
+prd.md
+architecture.md
+*.work_plan.md
+
+# ── Large media ───────────────────────────────────────────────────
 UI UX VUDEO.mp4
+*.mp4
+*.mov
+*.avi
+*.mkv
 
-# Stray pytest cache left at the repo root from running tests in the wrong dir
-.pytest_cache/
-
+# ── OS noise ──────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── Editor & IDE ─────────────────────────────────────────────────
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*~
+
+# ══════════════════════════════════════════════════════════════════
+#  Python / Backend
+# ══════════════════════════════════════════════════════════════════
+
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+ENV/
+env.bak/
+venv.bak/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+MANIFEST
+
+# Test & coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+nosetests.xml
+junit*.xml
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyright/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Data & model files (large scientific data — never commit these)
+*.nc
+*.nc4
+*.hdf
+*.hdf5
+*.h5
+*.zarr
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.parquet
+*.feather
+data/
+datasets/
+raw_data/
+
+# Matplotlib / output images from server-side rendering
+*.png
+*.jpg
+*.jpeg
+*.tiff
+!frontend/public/**
+!frontend/src/assets/**
+!frontend_stub/**/*.png
+
+# Uvicorn / server logs
+*.log
+logs/
+
+# Secrets & local config
+.env
+.env.*
+!.env.example
+secrets.yaml
+*.pem
+*.key
+
+# ══════════════════════════════════════════════════════════════════
+#  Node / Frontend (Vite + React)
+# ══════════════════════════════════════════════════════════════════
+
+node_modules/
+dist/
+dist-ssr/
+*.local
+.eslintcache
+.parcel-cache/
+.cache/
+.turbo/
+
+# npm / yarn / pnpm debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Lock files — keep package-lock.json / yarn.lock, ignore others
+# (comment out the one your team uses)
+# package-lock.json
+# yarn.lock
+
+# ══════════════════════════════════════════════════════════════════
+#  Miscellaneous
+# ══════════════════════════════════════════════════════════════════
+
+# Temporary scratch files
+*.tmp
+*.bak
+*.orig
+*.rej
+.scratch/
+scratch/
+
+# Compressed archives
+*.zip
+*.tar.gz
+*.tar.bz2
+*.rar
+*.7z
