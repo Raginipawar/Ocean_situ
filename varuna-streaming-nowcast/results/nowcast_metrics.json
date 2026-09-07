@@ -1,0 +1,14 @@
+{
+  "generated_at": "2026-09-07T10:30:28.884994+00:00",
+  "best_epoch": 22,
+  "best_val_loss": 0.05726098694212829,
+  "stopped_early": true,
+  "n_epochs_run": 52,
+  "final_train_loss": 0.03209983829225673,
+  "final_val_loss": 0.06608648657144701,
+  "evaluation": {
+    "model_mse": 0.05393724230143688,
+    "persistence_baseline_mse": 0.06168810650706291,
+    "improvement_over_baseline_pct": 12.564600608609389
+  }
+}
