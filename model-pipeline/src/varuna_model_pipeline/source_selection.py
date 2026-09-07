@@ -67,6 +67,9 @@ def load_with_explicit_fallback(
                 SourceAttempt(ModelSource.INCOIS_LAS, str(primary_path), False, str(exc))
             )
 
+    if fallback_path is None and cfg.use_live_glorys_fallback:
+        fallback_path = _fetch_live_glorys_fallback(cfg, attempts)
+
     if fallback_path is None:
         raise IngestionError(
             "INCOIS LAS primary source failed or was not configured, and no GLORYS "
@@ -96,6 +99,34 @@ def load_with_explicit_fallback(
             "Both INCOIS LAS primary and GLORYS fallback model sources failed. "
             f"Attempts: {attempts}"
         ) from exc
+
+
+def _fetch_live_glorys_fallback(
+    cfg: ModelPipelineSettings,
+    attempts: list[SourceAttempt],
+) -> Path | None:
+    """Fetch a fresh GLORYS window from Copernicus Marine to use as the
+    fallback source, instead of requiring a pre-downloaded local file.
+
+    Import is local so `copernicusmarine` (an optional dependency only
+    needed when this flag is on) never blocks importing this module.
+    Failure here is recorded as a normal failed attempt and falls through
+    to the "no fallback available" error below -- it never raises directly,
+    so a live-fetch failure (no network, no `copernicusmarine login` yet)
+    degrades the same way a missing local fallback path already does.
+    """
+    try:
+        from .sources.glorys_live import fetch_live_glorys_window
+
+        logger.info("No local GLORYS fallback path given; fetching a live window instead")
+        return fetch_live_glorys_window(
+            settings=cfg,
+            lookback_days=cfg.live_glorys_lookback_days,
+        )
+    except Exception as exc:  # noqa: BLE001 - any live-fetch failure just means "no fallback"
+        logger.warning("Live GLORYS fetch failed: %s", exc)
+        attempts.append(SourceAttempt(ModelSource.COPERNICUS_GLORYS, None, False, str(exc)))
+        return None
 
 
 def _selected_from_incois(

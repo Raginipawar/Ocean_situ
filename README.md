@@ -89,9 +89,14 @@ tracked variables, and **beats a persistence baseline on real held-out test
 data**. Full evidence trail (loss curve, predicted-vs-actual maps, metrics,
 trained checkpoint) in
 [`varuna-streaming-nowcast/results/`](varuna-streaming-nowcast/results). A
-proposed live-data contribution to Person 4's `model-pipeline`
+live-data contribution to Person 4's `model-pipeline`
 (`sources/glorys_live.py`, the authenticated-fetch piece his own checkpoint
-deferred) is included, flagged for review rather than silently merged — see
+deferred) is included and **wired into his active source-selection flow**
+behind an opt-in config flag (`use_live_glorys_fallback`, off by default) —
+so Person 1's Graph Fusion Engine can pull real, live Copernicus data
+through the same `/model` path it already consumes from, once that flag is
+turned on — see
+[`model-pipeline/README.md`](model-pipeline/README.md#live-glorys-fetch) and
 [`varuna-streaming-nowcast/README.md` §5](varuna-streaming-nowcast/README.md#5-integration-contracts).
 
 ## Quick start

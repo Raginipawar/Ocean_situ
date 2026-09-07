@@ -114,3 +114,51 @@ def test_source_selection_fails_when_both_sources_fail(tmp_path: Path):
     with pytest.raises(IngestionError, match="Both INCOIS LAS primary and GLORYS fallback"):
         load_with_explicit_fallback(primary_path=primary, fallback_path=fallback)
 
+
+def test_source_selection_fetches_live_glorys_when_flag_set_and_no_fallback_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """use_live_glorys_fallback=True + no local fallback file -> the live
+    fetch (sources/glorys_live.py) is used to produce the fallback path,
+    instead of raising "no fallback provided"."""
+    from varuna_model_pipeline.config import ModelPipelineSettings
+
+    fallback = tmp_path / "live_glorys.nc"
+    _glorys_fixture_dataset().to_netcdf(fallback)
+
+    def fake_fetch_live_glorys_window(*, settings, lookback_days):
+        assert lookback_days == 3
+        return fallback
+
+    monkeypatch.setattr(
+        "varuna_model_pipeline.sources.glorys_live.fetch_live_glorys_window",
+        fake_fetch_live_glorys_window,
+    )
+
+    cfg = ModelPipelineSettings(use_live_glorys_fallback=True, live_glorys_lookback_days=3)
+    selected = load_with_explicit_fallback(primary_path=None, fallback_path=None, settings=cfg)
+
+    assert selected.source == ModelSource.COPERNICUS_GLORYS
+    assert selected.source_path == str(fallback)
+
+
+def test_source_selection_raises_no_fallback_when_live_fetch_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """A live-fetch failure (no network, no `copernicusmarine login`) is
+    recorded as a failed attempt, not raised directly -- it falls through to
+    the same "no fallback available" error a missing local path gives."""
+    from varuna_model_pipeline.config import ModelPipelineSettings
+
+    def fake_fetch_live_glorys_window(*, settings, lookback_days):
+        raise RuntimeError("not logged in")
+
+    monkeypatch.setattr(
+        "varuna_model_pipeline.sources.glorys_live.fetch_live_glorys_window",
+        fake_fetch_live_glorys_window,
+    )
+
+    cfg = ModelPipelineSettings(use_live_glorys_fallback=True)
+    with pytest.raises(IngestionError, match="no GLORYS fallback path was provided"):
+        load_with_explicit_fallback(primary_path=None, fallback_path=None, settings=cfg)
+
