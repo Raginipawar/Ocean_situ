@@ -235,10 +235,10 @@ export function DigitalTwin() {
               text: "Green / amber / red: how closely the model agrees with real sensors here",
             },
             {
-              x: 58,
-              y: 13,
-              dx: 14,
-              dy: 5,
+              x: 57,
+              y: 82,
+              dx: 8,
+              dy: 1.5,
               text: "Live output from the real Graph Fusion Engine, not pre-recorded",
             },
           ]}
