@@ -5,6 +5,7 @@ import { Footer } from "./components/Footer";
 import { Home } from "./pages/Home";
 
 const DigitalTwin = lazy(() => import("./pages/DigitalTwin").then((m) => ({ default: m.DigitalTwin })));
+const Explorer = lazy(() => import("./pages/Explorer").then((m) => ({ default: m.Explorer })));
 const Services = lazy(() => import("./pages/Services").then((m) => ({ default: m.Services })));
 const About = lazy(() => import("./pages/About").then((m) => ({ default: m.About })));
 const Sitemap = lazy(() => import("./pages/Sitemap").then((m) => ({ default: m.Sitemap })));
@@ -18,6 +19,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/digital-twin" element={<DigitalTwin />} />
+            <Route path="/explorer" element={<Explorer />} />
             <Route path="/services" element={<Services />} />
             <Route path="/about" element={<About />} />
             <Route path="/sitemap" element={<Sitemap />} />

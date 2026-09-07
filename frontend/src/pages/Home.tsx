@@ -284,7 +284,7 @@ export function Home() {
                 radius={999}
                 tint="var(--color-accent)"
                 tintOpacity={1}
-                textColor="#ffffff"
+                textColor="#000000"
                 lineColor="#c0d2e0"
                 baseColor="#091e39"
                 className="font-nav"
@@ -569,7 +569,7 @@ export function Home() {
               radius={999}
               tint="var(--color-accent)"
               tintOpacity={1}
-              textColor="#ffffff"
+              textColor="#000000"
               lineColor="#c0d2e0"
               baseColor="#091e39"
               autoAnimate

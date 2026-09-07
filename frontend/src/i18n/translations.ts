@@ -13,6 +13,7 @@ export const TRANSLATIONS: Record<Lang, Record<string, string>> = {
   en: {
     "nav.home": "Home",
     "nav.digitalTwin": "Digital Twin",
+    "nav.explorer": "Explorer",
     "nav.services": "Services",
     "nav.about": "About",
     "nav.sitemap": "Sitemap",
@@ -39,6 +40,7 @@ export const TRANSLATIONS: Record<Lang, Record<string, string>> = {
   hi: {
     "nav.home": "होम",
     "nav.digitalTwin": "डिजिटल ट्विन",
+    "nav.explorer": "एक्सप्लोरर",
     "nav.services": "सेवाएँ",
     "nav.about": "हमारे बारे में",
     "nav.sitemap": "साइटमैप",
@@ -65,6 +67,7 @@ export const TRANSLATIONS: Record<Lang, Record<string, string>> = {
   bn: {
     "nav.home": "হোম",
     "nav.digitalTwin": "ডিজিটাল টুইন",
+    "nav.explorer": "এক্সপ্লোরার",
     "nav.services": "পরিষেবা",
     "nav.about": "আমাদের সম্পর্কে",
     "nav.sitemap": "সাইটম্যাপ",
@@ -91,6 +94,7 @@ export const TRANSLATIONS: Record<Lang, Record<string, string>> = {
   mr: {
     "nav.home": "मुख्यपृष्ठ",
     "nav.digitalTwin": "डिजिटल ट्विन",
+    "nav.explorer": "एक्सप्लोरर",
     "nav.services": "सेवा",
     "nav.about": "आमच्याबद्दल",
     "nav.sitemap": "साइटमॅप",
@@ -117,6 +121,7 @@ export const TRANSLATIONS: Record<Lang, Record<string, string>> = {
   gu: {
     "nav.home": "હોમ",
     "nav.digitalTwin": "ડિજિટલ ટ્વિન",
+    "nav.explorer": "એક્સપ્લોરર",
     "nav.services": "સેવાઓ",
     "nav.about": "અમારા વિશે",
     "nav.sitemap": "સાઇટમેપ",
@@ -143,6 +148,7 @@ export const TRANSLATIONS: Record<Lang, Record<string, string>> = {
   te: {
     "nav.home": "హోమ్",
     "nav.digitalTwin": "డిజిటల్ ట్విన్",
+    "nav.explorer": "ఎక్స్‌ప్లోరర్",
     "nav.services": "సేవలు",
     "nav.about": "మా గురించి",
     "nav.sitemap": "సైట్‌మ్యాప్",

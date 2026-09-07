@@ -40,8 +40,10 @@ export interface GlobeMarker {
 
 // Mirrors index.css's --color-trust-* light/dark values exactly. Kept in
 // sync manually (same pattern as lib/config.ts mirroring the backend) since
-// a WebGL material color can't read a CSS custom property directly.
-const TRUST_HEX: Record<"light" | "dark", Record<TrustLabel, string>> = {
+// a WebGL material color can't read a CSS custom property directly. Exported
+// so other WebGL/Cesium surfaces (e.g. the 3D Cube Explorer) share the same
+// literal colors instead of re-deriving their own.
+export const TRUST_HEX: Record<"light" | "dark", Record<TrustLabel, string>> = {
   light: { green: "#1f8a5f", amber: "#b9770e", red: "#c1402f" },
   dark: { green: "#3ddc97", amber: "#f2b134", red: "#ef5350" },
 };

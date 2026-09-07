@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Cesium's static assets (Workers/Assets/Widgets/ThirdParty), copied from
+# node_modules by the `postinstall` script in package.json -- regenerated
+# automatically on `npm install`, not checked in (7+MB, derived, not source).
+public/cesium

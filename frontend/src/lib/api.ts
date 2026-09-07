@@ -1,5 +1,16 @@
 import { API_BASE_URL, DRIFT_API_BASE_URL } from "./config";
-import type { Alert, FusedResponse, HealthResponse, ModelSnapshot, ObservationSnapshot } from "./types";
+import type {
+  Alert,
+  DepthProfileSnapshot,
+  FusedResponse,
+  HealthResponse,
+  ModelSnapshot,
+  NowcastInfo,
+  ObservationSnapshot,
+  VolumetricCellSeries,
+  VolumetricMeta,
+  VolumetricSnapshot,
+} from "./types";
 
 export class ApiError extends Error {
   status?: number;
@@ -37,6 +48,18 @@ export const api = {
   observations: () => getJson<ObservationSnapshot>("/observations"),
   fused: (engine: "auto" | "gnn" | "fallback" = "auto") =>
     getJson<FusedResponse>(`/fused?engine=${engine}`),
+  // Real depth-resolved observations (Person 6) for the 3D Cube Explorer.
+  // No mock fallback here on purpose -- an unreachable engine means "no real
+  // depth data available", not an invented one.
+  profiles: () => getJson<DepthProfileSnapshot>("/profiles"),
+  // Person 3's Nowcast Engine: real, verified training results read from
+  // its committed artifacts. Not live per-click inference (see NowcastInfo).
+  nowcastInfo: () => getJson<NowcastInfo>("/nowcast/info"),
+  // Real Copernicus-derived volumetric cube, for the 3D Cube Explorer.
+  volumetricMeta: () => getJson<VolumetricMeta>("/volumetric/meta"),
+  volumetricSnapshot: (dayIndex = -1) => getJson<VolumetricSnapshot>(`/volumetric/snapshot?day_index=${dayIndex}`),
+  volumetricCell: (lat: number, lon: number) =>
+    getJson<VolumetricCellSeries>(`/volumetric/cell?lat=${lat}&lon=${lon}`),
 };
 
 // Person 2's Drift Memory Engine (drift-memory-engine/) -- a separate

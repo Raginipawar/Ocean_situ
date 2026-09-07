@@ -8,6 +8,7 @@ export function Nav() {
   const links = [
     { to: "/", label: t("nav.home") },
     { to: "/digital-twin", label: t("nav.digitalTwin") },
+    { to: "/explorer", label: t("nav.explorer") },
     { to: "/services", label: t("nav.services") },
     { to: "/about", label: t("nav.about") },
   ];
