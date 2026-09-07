@@ -22,10 +22,19 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import config
-from .adapters import get_model_source, get_observation_source
+from . import config, volumetric
+from .adapters import get_depth_profile_source, get_model_source, get_nowcast_info_source, get_observation_source
 from .fusion_service import FusionService
-from .schemas import FusedResponse, ModelSnapshot, ObservationSnapshot
+from .schemas import (
+    DepthProfileSnapshot,
+    FusedResponse,
+    ModelSnapshot,
+    NowcastInfo,
+    ObservationSnapshot,
+    VolumetricCellSeries,
+    VolumetricMeta,
+    VolumetricSnapshot,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("graph_fusion.api")
@@ -96,3 +105,60 @@ def get_fused(
     except Exception as exc:  # noqa: BLE001
         logger.exception("Fusion failed")
         raise HTTPException(status_code=500, detail=f"Fusion failed: {exc}") from exc
+
+
+@app.get("/profiles", response_model=DepthProfileSnapshot)
+def get_profiles() -> DepthProfileSnapshot:
+    """Real depth-resolved observations (Argo/glider/CTD casts get genuine
+    multiple levels; surface-only instruments get a real single level) --
+    powers the 3D Cube Explorer. See adapters.InsituDepthProfileSource."""
+    try:
+        return get_depth_profile_source().fetch()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Depth profile source unavailable: {exc}") from exc
+
+
+@app.get("/nowcast/info", response_model=NowcastInfo)
+def get_nowcast_info() -> NowcastInfo:
+    """Person 3's Nowcast Engine real training/evaluation results, read live
+    from its committed artifacts. See adapters.NowcastInfoSource for why
+    this isn't live per-click inference."""
+    return get_nowcast_info_source().fetch()
+
+
+@app.get("/volumetric/meta", response_model=VolumetricMeta)
+def get_volumetric_meta() -> VolumetricMeta:
+    """Real grid axes (lat/lon/depth/time) for the 3D Cube Explorer's
+    free-roam navigation. See volumetric.py."""
+    try:
+        return VolumetricMeta.model_validate(volumetric.get_meta())
+    except volumetric.VolumetricUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/volumetric/snapshot", response_model=VolumetricSnapshot)
+def get_volumetric_snapshot(
+    day_index: int = Query(-1, description="Index into the real time axis; -1 = most recent real day"),
+) -> VolumetricSnapshot:
+    """The full real grid (every depth/lat/lon cell), one real day, every
+    variable -- what the whole-Bay-of-Bengal free-roam view is colored by."""
+    try:
+        return VolumetricSnapshot.model_validate(volumetric.get_snapshot(day_index))
+    except volumetric.VolumetricUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (IndexError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid day_index: {exc}") from exc
+
+
+@app.get("/volumetric/cell", response_model=VolumetricCellSeries)
+def get_volumetric_cell(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+) -> VolumetricCellSeries:
+    """The full real 270-day time series for the grid cell nearest (lat,
+    lon), across all real depth levels -- fetched only for the currently
+    open cube, backed by the full 724MB dataset."""
+    try:
+        return VolumetricCellSeries.model_validate(volumetric.get_cell_series(lat, lon))
+    except volumetric.VolumetricUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc

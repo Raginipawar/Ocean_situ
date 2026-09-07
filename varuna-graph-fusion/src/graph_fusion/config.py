@@ -126,6 +126,13 @@ class SourceConfig:
     observation_source: str = os.getenv("VARUNA_OBS_SOURCE", "mock")
     observation_source_url: str = os.getenv("VARUNA_OBS_SOURCE_URL", "http://localhost:8000/observations")
     http_timeout_s: float = 5.0
+    # Real Copernicus-derived volumetric cube (Person 3's export), for the 3D
+    # Cube Explorer. Not committed to git (724MB) -- paths default to the
+    # project root, override via env var if placed elsewhere. Missing files
+    # are handled at the endpoint (503, not a startup crash), since this is a
+    # supplementary feature the rest of the app doesn't depend on.
+    volumetric_full_nc_path: str | None = os.getenv("VARUNA_VOLUMETRIC_FULL_NC")
+    volumetric_latest_nc_path: str | None = os.getenv("VARUNA_VOLUMETRIC_LATEST_NC")
 
 
 SOURCES = SourceConfig()

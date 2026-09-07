@@ -30,7 +30,7 @@ import httpx
 
 from . import config, mock_data
 from .ingest import parse_model_snapshot, parse_observation_snapshot
-from .schemas import ModelSnapshot, ObservationSnapshot
+from .schemas import DepthLevel, DepthProfile, DepthProfileSnapshot, ModelSnapshot, NowcastInfo, ObservationSnapshot
 
 logger = logging.getLogger("graph_fusion.adapters")
 
@@ -229,3 +229,157 @@ def get_observation_source() -> ObservationSource:
     if config.SOURCES.observation_source == "pipeline":
         return FallbackObservationSource(primary=InsituPipelineSource(), fallback=MockObservationSource())
     return MockObservationSource()
+
+
+# ---------------------------------------------------------------------------
+# /profiles -- real depth-resolved observations, for the 3D Cube Explorer.
+#
+# No mock variant on purpose: a fabricated depth profile (invented
+# temperature/salinity at invented depths) is exactly the kind of placeholder
+# value the Cube Explorer must never show. If Person 6's real pipeline is
+# unavailable, this source returns an EMPTY profile list -- honestly showing
+# "no real depth data available" -- rather than inventing one.
+# ---------------------------------------------------------------------------
+
+class DepthProfileSource(abc.ABC):
+    @abc.abstractmethod
+    def fetch(self) -> DepthProfileSnapshot: ...
+
+
+class InsituDepthProfileSource(DepthProfileSource):
+    """Calls Person 6's `varuna_insitu_pipeline` in-process (same package as
+    InsituPipelineSource, same call) and returns the real vertical profiles
+    it produces alongside the surface snapshot -- Argo/glider/CTD casts get
+    genuine multiple depth levels; buoys/moorings/drifters get a real
+    single-level (surface) profile, never an invented deeper one."""
+
+    def __init__(self, source: str = "local_demo"):
+        self.source = source
+
+    def fetch(self) -> DepthProfileSnapshot:
+        try:
+            from varuna_insitu_pipeline import InSituPipeline, RegionBounds
+        except ImportError as exc:  # pragma: no cover - environment-dependent
+            raise RuntimeError(
+                "varuna_insitu_pipeline isn't installed. From varuna-graph-fusion/: "
+                "pip install -e ../insitu-pipeline"
+            ) from exc
+
+        pipeline = InSituPipeline()
+        bounds = RegionBounds(lat_min=5.0, lat_max=25.0, lon_min=80.0, lon_max=100.0)
+        _snapshot, profiles, _qc = pipeline.run(bounds=bounds, source=self.source)
+
+        return DepthProfileSnapshot(
+            region=config.REGION_NAME,
+            source="insitu_pipeline",
+            profiles=[
+                DepthProfile(
+                    sensor_id=p.sensor_id,
+                    sensor_type=p.sensor_type.value,
+                    lat=p.lat,
+                    lon=p.lon,
+                    time=p.time,
+                    levels=[
+                        DepthLevel(
+                            depth_m=lv.depth_m,
+                            sst_c=lv.temperature_c,
+                            salinity_psu=lv.salinity_psu,
+                            current_u_ms=lv.current_u_ms,
+                            current_v_ms=lv.current_v_ms,
+                            chlorophyll_mg_m3=lv.chlorophyll_mg_m3,
+                        )
+                        for lv in p.levels
+                    ],
+                )
+                for p in profiles
+            ],
+        )
+
+
+def get_depth_profile_source() -> DepthProfileSource:
+    return InsituDepthProfileSource()
+
+
+# ---------------------------------------------------------------------------
+# /nowcast/info -- Person 3's Nowcast Engine, real verified training results.
+#
+# Reads Nikhil's own committed evaluation artifacts (results/nowcast_metrics.json,
+# results/nowcast_model.pt) directly -- no mock, no invented numbers. This is
+# NOT live per-request inference: that would need a real Copernicus input
+# sequence this engine doesn't have access to (see varuna-streaming-nowcast/
+# README.md sections 3 and 6). Parameter count is computed fresh from the
+# actual checkpoint tensors on every call, not hardcoded, so it can never
+# silently drift from what's really committed.
+# ---------------------------------------------------------------------------
+
+class NowcastInfoSource:
+    def __init__(self, results_dir=None):
+        import pathlib
+
+        self.results_dir = results_dir or (
+            pathlib.Path(__file__).resolve().parents[3] / "varuna-streaming-nowcast" / "results"
+        )
+
+    def fetch(self) -> NowcastInfo:
+        import json
+
+        metrics_path = self.results_dir / "nowcast_metrics.json"
+        checkpoint_path = self.results_dir / "nowcast_model.pt"
+
+        if not metrics_path.exists():
+            return NowcastInfo(
+                available=False,
+                note="varuna-streaming-nowcast/results/nowcast_metrics.json not found.",
+            )
+
+        metrics = json.loads(metrics_path.read_text())
+        evaluation = metrics.get("evaluation", {})
+
+        n_parameters = None
+        num_layers = None
+        depth_levels = None
+        if checkpoint_path.exists():
+            try:
+                import torch
+
+                checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+                n_parameters = sum(t.numel() for t in checkpoint["model_state"].values())
+                num_layers = checkpoint.get("num_layers")
+                # mask is (seq_len, depth, lat, lon) -- depth read straight off
+                # the real tensor shape, not hardcoded from the README.
+                mask = checkpoint.get("mask")
+                if mask is not None and hasattr(mask, "shape") and len(mask.shape) >= 2:
+                    depth_levels = int(mask.shape[1])
+            except Exception as exc:  # noqa: BLE001 - param count is a nice-to-have, not fatal
+                logger.warning("Could not load nowcast checkpoint for architecture details: %s", exc)
+
+        architecture = (
+            f"Stacked {num_layers}-layer ConvLSTM (from-scratch, nn.Conv3d gates over depth x lat x lon)"
+            if num_layers is not None
+            else "Stacked ConvLSTM (from-scratch, nn.Conv3d gates over depth x lat x lon)"
+        )
+
+        return NowcastInfo(
+            available=True,
+            architecture=architecture,
+            n_parameters=n_parameters,
+            trained_on="270 real consecutive days of Copernicus Marine GLORYS reanalysis (Bay of Bengal, 0-56m depth)",
+            variables=["sst_c", "salinity_psu", "current_u_ms", "current_v_ms", "wave_height_m", "chlorophyll_mg_m3"],
+            depth_levels=depth_levels,
+            held_out_test_mse=evaluation.get("model_mse"),
+            persistence_baseline_mse=evaluation.get("persistence_baseline_mse"),
+            improvement_over_baseline_pct=evaluation.get("improvement_over_baseline_pct"),
+            # Not in nowcast_metrics.json (only normalized MSE is) -- left null
+            # rather than hardcoding the README's reported figure as if it were
+            # read live from this file.
+            sst_mae_c=None,
+            note=(
+                "Evaluation results from training on real data (Person 3's track). "
+                "Not live per-click inference -- no real Copernicus input sequence "
+                "is available to this engine to predict from."
+            ),
+        )
+
+
+def get_nowcast_info_source() -> NowcastInfoSource:
+    return NowcastInfoSource()

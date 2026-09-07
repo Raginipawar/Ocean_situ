@@ -138,3 +138,107 @@ class FusedResponse(BaseModel):
     time: datetime = Field(default_factory=_utcnow)
     points: list[FusedPoint]
     summary: FusionSummary
+
+
+# ---------------------------------------------------------------------------
+# /profiles  (real depth-resolved observations -- Person 6's Argo/Glider/CTD
+# casts, for the 3D Cube Explorer. Surface-only instruments like buoys and
+# drifters get a real single-level "profile" -- never a fabricated deeper one.)
+# ---------------------------------------------------------------------------
+
+class DepthLevel(BaseModel):
+    depth_m: float = Field(..., ge=0.0)
+    sst_c: float | None = None
+    salinity_psu: float | None = None
+    current_u_ms: float | None = None
+    current_v_ms: float | None = None
+    chlorophyll_mg_m3: float | None = None
+
+
+class DepthProfile(BaseModel):
+    sensor_id: str
+    sensor_type: SensorType
+    lat: float = Field(..., ge=-90, le=90)
+    lon: float = Field(..., ge=-180, le=180)
+    time: datetime = Field(default_factory=_utcnow)
+    levels: list[DepthLevel]
+
+
+class DepthProfileSnapshot(BaseModel):
+    region: str
+    time: datetime = Field(default_factory=_utcnow)
+    source: str = Field("mock", description="e.g. 'insitu_pipeline', 'mock'")
+    profiles: list[DepthProfile]
+
+
+# ---------------------------------------------------------------------------
+# /nowcast/info  (Person 3's Nowcast Engine -- real, verified training
+# results read from its own committed artifacts, not live per-request
+# inference: no real Copernicus input sequence is available to this engine
+# to predict from. See varuna-streaming-nowcast/README.md section 3/4/6.)
+# ---------------------------------------------------------------------------
+
+class NowcastInfo(BaseModel):
+    available: bool
+    architecture: str | None = None
+    n_parameters: int | None = None
+    trained_on: str | None = None
+    variables: list[str] = Field(default_factory=list)
+    depth_levels: int | None = None
+    held_out_test_mse: float | None = None
+    persistence_baseline_mse: float | None = None
+    improvement_over_baseline_pct: float | None = None
+    sst_mae_c: float | None = None
+    note: str
+
+
+# ---------------------------------------------------------------------------
+# /volumetric  (Person 3's real Copernicus-derived dense grid, for the 3D
+# Cube Explorer's Google-Earth-style free-roam navigation: every cell of a
+# genuine depth x lat x lon grid is a real, addressable "cube", not just the
+# ~29 sparse sensor points /observations gives us.)
+# ---------------------------------------------------------------------------
+
+class VolumetricMeta(BaseModel):
+    region: str
+    lat: list[float]
+    lon: list[float]
+    depth_m: list[float]
+    time: list[str]
+    variables: list[str]
+    source: str
+
+
+class VolumetricSnapshot(BaseModel):
+    """One real day, the FULL grid, every variable -- nested
+    [depth][lat][lon] arrays, values rounded for transport (not clipped or
+    fabricated, just fewer decimal digits over the wire)."""
+
+    time: str
+    depth_m: list[float]
+    lat: list[float]
+    lon: list[float]
+    sst_c: list[list[list[float]]]
+    salinity_psu: list[list[list[float]]]
+    current_u_ms: list[list[list[float]]]
+    current_v_ms: list[list[list[float]]]
+    wave_height_m: list[list[list[float]]]
+    chlorophyll_mg_m3: list[list[list[float]]]
+
+
+class VolumetricCellSeries(BaseModel):
+    """One real grid cell, the FULL real time series (all 270 days) across
+    all 10 real depth levels -- fetched only for the currently-open cube,
+    not the whole grid, so this stays a small, fast per-click request even
+    though it's backed by the full 724MB dataset."""
+
+    lat: float
+    lon: float
+    depth_m: list[float]
+    time: list[str]
+    sst_c: list[list[float]]
+    salinity_psu: list[list[float]]
+    current_u_ms: list[list[float]]
+    current_v_ms: list[list[float]]
+    wave_height_m: list[list[float]]
+    chlorophyll_mg_m3: list[list[float]]
