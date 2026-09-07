@@ -68,6 +68,14 @@ class ModelPipelineSettings(BaseSettings):
     glorys_url: str | None = None
     local_demo_path: str | None = None
 
+    # When no local GLORYS fallback file is given, fetch a fresh window
+    # directly from Copernicus Marine instead (see sources/glorys_live.py).
+    # Off by default: it requires network access and a prior
+    # `copernicusmarine login` on the machine, neither of which every caller
+    # (e.g. CI, an offline demo) has.
+    use_live_glorys_fallback: bool = False
+    live_glorys_lookback_days: int = 7
+
     region: RegionBounds = Field(default_factory=RegionBounds)
     target_grid: TargetGridConfig = Field(default_factory=TargetGridConfig)
     time_range: TimeRangeConfig = Field(default_factory=TimeRangeConfig)

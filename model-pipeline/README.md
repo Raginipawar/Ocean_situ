@@ -114,12 +114,48 @@ Fallback behavior is explicit:
 
 1. Try INCOIS LAS.
 2. If INCOIS fails with a typed ingestion error, record the failure.
-3. Try GLORYS.
-4. Return the selected source plus a list of attempts for provenance.
-5. If both fail, raise a clear error.
+3. Try GLORYS, using `fallback_path` if one was given.
+4. If no `fallback_path` was given and `use_live_glorys_fallback=True`
+   (`ModelPipelineSettings`, off by default), fetch a fresh GLORYS window
+   directly from Copernicus Marine instead — see "Live GLORYS Fetch" below —
+   and use that as the fallback path.
+5. Return the selected source plus a list of attempts for provenance.
+6. If both fail, raise a clear error.
 
 The rest of the pipeline should use the canonical Dataset and selected-source
 metadata, not source-specific variable names.
+
+## Live GLORYS Fetch
+
+Implemented in `src/varuna_model_pipeline/sources/glorys_live.py`
+(contributed by Person 3 while gathering real training data for the Nowcast
+Engine — `glorys.py`'s own docstring says live Copernicus authentication was
+"intentionally outside this checkpoint"; this fills that gap without
+touching the tested GLORYS parsing logic).
+
+`fetch_live_glorys_window()` calls the official `copernicusmarine` Python
+client to pull the most recent `lookback_days` of real GLORYS data for the
+configured region into a local NetCDF file, which `GlorysIngestor.load()`
+then parses exactly as it would any other GLORYS file.
+
+It's wired into `source_selection.py` as described above, gated behind
+`use_live_glorys_fallback` (default off) because it needs network access and
+a one-time `copernicusmarine login` on the machine — neither of which every
+caller (CI, an offline local-demo run) has. Turn it on with:
+
+```python
+from varuna_model_pipeline.config import ModelPipelineSettings
+from varuna_model_pipeline.source_selection import load_with_explicit_fallback
+
+settings = ModelPipelineSettings(use_live_glorys_fallback=True, live_glorys_lookback_days=7)
+selected = load_with_explicit_fallback(primary_path=None, fallback_path=None, settings=settings)
+```
+
+A failed live fetch (no network, no login yet) is recorded as a normal
+failed attempt, not raised directly — it degrades the same way a missing
+local fallback path already does. Tests in `tests/test_glorys_live.py` and
+`tests/test_glorys_fallback.py` mock `copernicusmarine`/the fetch call, so
+the suite never depends on live network access.
 
 ## Region Extraction
 

@@ -163,9 +163,18 @@ shape and the 2D/3D grid the ConvLSTM operates on.
 **Contribution to Person 4's `model-pipeline`:** his `sources/glorys.py`
 explicitly deferred live Copernicus authentication ("intentionally outside
 this checkpoint"). `../model-pipeline/src/varuna_model_pipeline/sources/glorys_live.py`
-is that missing piece, added as a proposed, additive contribution (own file,
-own tests, doesn't touch his tested parsing logic) — see its docstring.
-Flagged to the team, not silently merged into his ownership area.
+is that missing piece — own file, own tests, doesn't touch his tested
+parsing logic (see its docstring) — and it is now **wired into his active
+source-selection flow**, not just sitting alongside it: when no local GLORYS
+fallback file is given and `ModelPipelineSettings.use_live_glorys_fallback`
+is set (off by default — it needs network access and a prior
+`copernicusmarine login`), `source_selection.py` calls it to fetch a fresh
+real window and uses that as the fallback automatically. That means Person
+1's Graph Fusion Engine (or anyone consuming `model-pipeline`'s output) can
+get real, live Copernicus data through the exact same `/model` path it
+already uses, by flipping one config flag — no separate integration step.
+See `../model-pipeline/README.md`'s "Live GLORYS Fetch" section for the
+wiring details and how to turn it on.
 
 ## 6. The Mamba/SSM question
 
