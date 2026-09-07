@@ -1,8 +1,7 @@
 # VARUNA 
 
 **Visualization & Assimilation of Real-time Underwater Network Analytics**
-Smart India Hackathon 2026 · Team **Hudson Hackers** · Problem Statement
-SIH26067 (Ministry of Earth Sciences, Disaster Management)
+Team **Hudson Hackers** ·
 
 A browser-based living digital twin of the Indian Ocean that fuses
 INCOIS/HOOFS-class forecast model output with real Argo/Glider/CTD/Buoy
