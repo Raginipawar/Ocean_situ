@@ -1,6 +1,6 @@
 /**
  * Mirrors varuna-graph-fusion/src/graph_fusion/schemas.py exactly.
- * If the backend contract changes, update this file only — every component
+ * If the backend contract changes, update this file only. Every component
  * that talks to the API imports these types instead of redefining shapes.
  */
 
@@ -91,4 +91,21 @@ export interface FusedResponse {
 export interface HealthResponse {
   status: string;
   region: string;
+}
+
+/** Mirrors drift-memory-engine/src/drift_memory/schemas.py::Alert (Person 2's contract). */
+export type AlertSeverity = "info" | "warning" | "critical";
+
+export interface Alert {
+  id: string;
+  region: string;
+  variable: string;
+  severity: AlertSeverity;
+  message: string;
+  timestamp: string;
+  lat: number;
+  lon: number;
+  model_value: number;
+  observed_value: number;
+  divergence: number;
 }

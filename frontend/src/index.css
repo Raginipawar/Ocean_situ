@@ -1,27 +1,38 @@
 @import "tailwindcss";
 
-/* Manual light/dark toggling (not just prefers-color-scheme) — see src/theme/ThemeProvider.tsx */
+/* Manual light/dark toggling (not just prefers-color-scheme), see src/theme/ThemeProvider.tsx */
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-display: "Big Shoulders Display", "Archivo Narrow", sans-serif;
-  --font-sans: "Archivo Expanded", "Helvetica Neue", Arial, sans-serif;
-  --font-serif: "EB Garamond", Georgia, serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-sans: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, Menlo, Consolas, "Liberation Mono", monospace;
 
+  /* Trust colors are a functional safety signal (matches the backend's real
+     trust_label), not a branding choice, so they stay green/amber/red rather
+     than following the palette below. */
   --color-trust-green: #1f8a5f;
   --color-trust-amber: #b9770e;
   --color-trust-red: #c1402f;
 }
 
 :root {
-  --color-bg: #f4eae1;
-  --color-bg-raised: #ffffff;
-  --color-ink: #14110f;
-  --color-ink-muted: #5c554d;
-  --color-border: rgb(20 17 15 / 0.12);
-  --color-accent: #0f6e63;
-  --color-accent-2: #143a5c;
+  /* "Celestial Canvas" ocean palette. */
+  --palette-celestial-canvas: #091e39;
+  --palette-ambassador-blue: #0b345a;
+  --palette-blueberry-twist: #21567c;
+  --palette-borage: #4c81a3;
+  --palette-afloat: #79a4c0;
+  --palette-angel-falls: #a3bed3;
+  --palette-sea-drive: #c0d2e0;
+
+  --color-bg: #ffffff;
+  --color-bg-raised: var(--palette-angel-falls);
+  --color-ink: var(--palette-celestial-canvas);
+  --color-ink-muted: var(--palette-blueberry-twist);
+  --color-border: rgb(9 30 57 / 0.14);
+  --color-accent: var(--palette-borage);
+  --color-accent-2: var(--palette-ambassador-blue);
   --color-trust-green: #1f8a5f;
   --color-trust-amber: #b9770e;
   --color-trust-red: #c1402f;
@@ -29,16 +40,30 @@
 }
 
 .dark {
-  --color-bg: #06090c;
-  --color-bg-raised: #0d1319;
-  --color-ink: #f4eae1;
-  --color-ink-muted: #9aa3ab;
-  --color-border: rgb(244 234 225 / 0.14);
-  --color-accent: #35b8a6;
-  --color-accent-2: #5c9be0;
+  --color-bg: #000000;
+  --color-bg-raised: var(--palette-celestial-canvas);
+  --color-ink: var(--palette-sea-drive);
+  --color-ink-muted: var(--palette-angel-falls);
+  --color-border: rgb(192 210 224 / 0.16);
+  --color-accent: var(--palette-afloat);
+  --color-accent-2: var(--palette-angel-falls);
   --color-trust-green: #3ddc97;
   --color-trust-amber: #f2b134;
   --color-trust-red: #ef5350;
+  color-scheme: dark;
+}
+
+/* A distinct WCAG high-contrast mode, independent of light/dark, matching the
+   INCOIS-style accessibility toolbar. Declared after .dark so it wins when
+   both classes are on <html> at once. */
+.high-contrast {
+  --color-bg: #000000;
+  --color-bg-raised: #000000;
+  --color-ink: #ffffff;
+  --color-ink-muted: #ffff00;
+  --color-border: #ffffff;
+  --color-accent: #ffff00;
+  --color-accent-2: #ffff00;
   color-scheme: dark;
 }
 
@@ -53,7 +78,7 @@ html {
 body {
   background: var(--color-bg);
   color: var(--color-ink);
-  font-family: var(--font-serif);
+  font-family: var(--font-sans);
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
@@ -64,8 +89,28 @@ body {
 
 .font-display {
   font-family: var(--font-display);
-  letter-spacing: -0.01em;
-  text-transform: uppercase;
+}
+
+.gradient-text {
+  background: linear-gradient(120deg, var(--color-accent), var(--color-accent-2));
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  /* Instrument Serif's tall ascenders/descenders (and Indic matras on the
+     translated hero headline) clip against background-clip:text without
+     this breathing room. */
+  line-height: 1.1;
+  padding-block: 0.08em;
+}
+
+/* Devanagari/Bengali/Gujarati/Telugu vowel signs need noticeably more
+   vertical room than Latin does, or their tops get cut off mid-word. */
+:lang(hi) .hero-headline,
+:lang(bn) .hero-headline,
+:lang(mr) .hero-headline,
+:lang(gu) .hero-headline,
+:lang(te) .hero-headline {
+  line-height: 1.4;
 }
 
 .font-nav {
@@ -79,10 +124,45 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Hero gradient wash — our translation of richardsancho.com's click-triggered
+.glass-bar {
+  background: color-mix(in oklab, var(--color-bg-raised) 55%, transparent);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid color-mix(in oklab, var(--color-ink) 12%, transparent);
+  box-shadow: 0 8px 32px rgb(9 30 57 / 0.12);
+}
+
+.high-contrast .glass-bar {
+  background: #000000;
+  border-color: #ffffff;
+  box-shadow: none;
+}
+
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll 26s linear infinite;
+}
+
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track {
+    animation: none;
+  }
+}
+
+.scroll-anchor {
+  scroll-margin-top: 8rem;
+}
+
+/* Hero gradient wash: our translation of richardsancho.com's click-triggered
    WebGL colour wash into something that reads instantly on an official/gov
-   facing site: a slow-drifting ocean teal → navy mesh instead of a gimmick
-   that depends on visitor interaction to appear. */
+   facing site. A slow-drifting mesh across the ocean palette instead of a
+   gimmick that depends on visitor interaction to appear. */
 .gradient-wash {
   background-image: radial-gradient(circle at 20% 20%, color-mix(in oklab, var(--color-accent) 35%, transparent), transparent 55%),
     radial-gradient(circle at 80% 30%, color-mix(in oklab, var(--color-accent-2) 30%, transparent), transparent 60%),
@@ -103,4 +183,15 @@ body {
   html {
     scroll-behavior: auto;
   }
+}
+
+/* High contrast mode is for maximum legibility, not decorative wash. */
+.high-contrast .gradient-wash {
+  display: none;
+}
+
+.high-contrast .gradient-text {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: var(--color-accent);
 }

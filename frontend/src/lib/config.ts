@@ -22,7 +22,7 @@ export const REGION_CENTER = {
 
 export const VARIABLES = ["sst_c", "current_u_ms", "current_v_ms", "wave_height_m"] as const;
 
-// TRUST_GREEN_MIN / TRUST_AMBER_MIN from config.py — confidence >= green is
+// TRUST_GREEN_MIN / TRUST_AMBER_MIN from config.py. Confidence >= green is
 // "green", >= amber is "amber", below that is "red". The backend computes
 // trust_label itself; these are only for rendering a legend, never for
 // re-deriving a label client-side.
@@ -30,3 +30,8 @@ export const TRUST_GREEN_MIN = 0.7;
 export const TRUST_AMBER_MIN = 0.4;
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+
+// Person 2's Drift Memory Engine (drift-memory-engine/), a separate FastAPI
+// process from the Graph Fusion Engine above -- defaults to port 8002 so it
+// never collides with the engine (8000/8001) or Person 5's gateway (8000).
+export const DRIFT_API_BASE_URL = import.meta.env.VITE_DRIFT_API_BASE_URL ?? "http://localhost:8002";
