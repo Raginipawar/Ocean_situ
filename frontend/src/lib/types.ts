@@ -92,3 +92,20 @@ export interface HealthResponse {
   status: string;
   region: string;
 }
+
+/** Mirrors drift-memory-engine/src/drift_memory/schemas.py::Alert (Person 2's contract). */
+export type AlertSeverity = "info" | "warning" | "critical";
+
+export interface Alert {
+  id: string;
+  region: string;
+  variable: string;
+  severity: AlertSeverity;
+  message: string;
+  timestamp: string;
+  lat: number;
+  lon: number;
+  model_value: number;
+  observed_value: number;
+  divergence: number;
+}

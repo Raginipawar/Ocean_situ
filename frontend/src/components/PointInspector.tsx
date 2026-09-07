@@ -11,6 +11,9 @@ const TRUST_COLOR: Record<FusedPoint["trust_label"], string> = {
 /** How far out (degrees) the local mini-map looks around the selected point. */
 const MAP_WINDOW_DEG = 3;
 const MAP_SIZE = 220;
+const PROFILE_WIDTH = 220;
+const PROFILE_HEIGHT = 160;
+const PROFILE_PAD = 28;
 
 interface VariableRow {
   label: string;
@@ -56,7 +59,7 @@ function LocalMiniMap({ center, nearby }: { center: FusedPoint; nearby: FusedPoi
         aria-label={`Local map around ${center.lat.toFixed(2)}, ${center.lon.toFixed(2)}`}
         style={{ borderRadius: 12, border: "1px solid var(--color-border)" }}
       >
-        <rect width={MAP_SIZE} height={MAP_SIZE} fill="var(--color-surface-2, var(--color-surface))" />
+        <rect width={MAP_SIZE} height={MAP_SIZE} fill="var(--color-bg-raised)" />
         {nearby.map((p, i) => {
           const [x, y] = toXY(p.lat, p.lon);
           const isCenter = p.lat === center.lat && p.lon === center.lon;
@@ -78,6 +81,84 @@ function LocalMiniMap({ center, nearby }: { center: FusedPoint; nearby: FusedPoi
         <span>{lonMin.toFixed(1)}°E</span>
         <span>±{MAP_WINDOW_DEG}° window</span>
         <span>{lonMax.toFixed(1)}°E</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * SST-vs-depth scatter of real sensors near the selected point -- the one
+ * view a flat 2D map genuinely cannot show, since it only ever colours a
+ * surface. This is NOT a single Argo float's vertical profile (the mock
+ * backend gives each sensor exactly one depth, not a depth-stacked cast at
+ * one location -- see mock_data.py's depth_choices), so it's labelled as
+ * what it actually is: real depth/temperature readings from different
+ * nearby sensors, not one continuous curve.
+ */
+function DepthProfileChart({ point, nearby }: { point: FusedPoint; nearby: FusedPoint[] }) {
+  const withDepth = useMemo(
+    () => nearby.filter((p) => p.is_sensor_node && p.sst_c !== null),
+    [nearby],
+  );
+
+  if (withDepth.length < 2) return null;
+
+  const depths = withDepth.map((p) => p.depth_m);
+  const temps = withDepth.map((p) => p.sst_c as number);
+  const maxDepth = Math.max(10, ...depths);
+  const minTemp = Math.min(...temps);
+  const maxTemp = Math.max(...temps);
+  const tempSpan = Math.max(0.5, maxTemp - minTemp);
+
+  const plotW = PROFILE_WIDTH - PROFILE_PAD;
+  const plotH = PROFILE_HEIGHT - PROFILE_PAD;
+
+  const toXY = (depthM: number, sstC: number) => {
+    const x = PROFILE_PAD + ((sstC - minTemp) / tempSpan) * plotW;
+    const y = (depthM / maxDepth) * plotH; // 0m at top, deeper sinks down
+    return [x, y] as const;
+  };
+
+  return (
+    <div>
+      <svg
+        width={PROFILE_WIDTH}
+        height={PROFILE_HEIGHT}
+        viewBox={`0 0 ${PROFILE_WIDTH} ${PROFILE_HEIGHT}`}
+        role="img"
+        aria-label="Sea surface temperature by depth for nearby real sensors"
+        style={{ borderRadius: 12, border: "1px solid var(--color-border)" }}
+      >
+        <rect width={PROFILE_WIDTH} height={PROFILE_HEIGHT} fill="var(--color-bg-raised)" />
+        <line
+          x1={PROFILE_PAD}
+          y1={0}
+          x2={PROFILE_PAD}
+          y2={plotH}
+          stroke="var(--color-border)"
+          strokeWidth={1}
+        />
+        {withDepth.map((p, i) => {
+          const [x, y] = toXY(p.depth_m, p.sst_c as number);
+          const isSelected = p.lat === point.lat && p.lon === point.lon;
+          return (
+            <circle
+              key={i}
+              cx={x}
+              cy={y}
+              r={isSelected ? 6 : 3.5}
+              fill={TRUST_COLOR[p.trust_label]}
+              stroke={isSelected ? "var(--color-ink)" : "none"}
+              strokeWidth={isSelected ? 2 : 0}
+              opacity={isSelected ? 1 : 0.75}
+            />
+          );
+        })}
+      </svg>
+      <div className="mt-2 flex items-center justify-between font-mono-data text-[10px] opacity-50">
+        <span>0m</span>
+        <span>SST vs. depth, nearby sensors</span>
+        <span>{Math.round(maxDepth)}m</span>
       </div>
     </div>
   );
@@ -147,7 +228,7 @@ export function PointInspector({
                 <div key={row.label} className="flex items-center justify-between gap-4 text-sm">
                   <dt className="opacity-70">{row.label}</dt>
                   <dd className="font-mono-data flex items-center gap-3">
-                    <span>{row.value !== null ? `${row.value.toFixed(row.decimals)} ${row.unit}` : "—"}</span>
+                    <span>{row.value !== null ? `${row.value.toFixed(row.decimals)} ${row.unit}` : "N/A"}</span>
                     {row.correction !== null && (
                       <span
                         className="text-xs opacity-70"
@@ -170,6 +251,10 @@ export function PointInspector({
             <h3 className="font-nav text-xs opacity-60">Local area</h3>
             <div className="mt-3">
               <LocalMiniMap center={point} nearby={nearby} />
+            </div>
+            <h3 className="font-nav mt-6 text-xs opacity-60">Depth</h3>
+            <div className="mt-3">
+              <DepthProfileChart point={point} nearby={nearby} />
             </div>
           </div>
         </div>

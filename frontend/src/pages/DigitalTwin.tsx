@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Globe, type GlobeMarker } from "../components/globe/Globe";
+import { AnnotationLayer } from "../components/Annotation";
 import { CoordinateReadout } from "../components/CoordinateReadout";
 import { PointInspector } from "../components/PointInspector";
 import { TrustBadge } from "../components/TrustBadge";
-import { api, ApiError } from "../lib/api";
-import { API_BASE_URL, REGION_CENTER, REGION_LABEL, TRUST_AMBER_MIN, TRUST_GREEN_MIN } from "../lib/config";
-import type { FusedPoint, FusedResponse, TrustLabel } from "../lib/types";
+import { api, driftApi, ApiError } from "../lib/api";
+import {
+  API_BASE_URL,
+  DRIFT_API_BASE_URL,
+  REGION_BBOX,
+  REGION_CENTER,
+  REGION_LABEL,
+  TRUST_AMBER_MIN,
+  TRUST_GREEN_MIN,
+} from "../lib/config";
+import type { Alert, FusedPoint, FusedResponse, TrustLabel } from "../lib/types";
 
 /** Stable id for a fused point, shared between the globe markers, the
  * sensor list, and the click-to-inspect panel so all three can refer to
@@ -50,6 +59,14 @@ function nearestPoint(
   return best;
 }
 
+const ALERT_SEVERITY_COLOR: Record<Alert["severity"], string> = {
+  info: "var(--color-trust-green)",
+  warning: "var(--color-trust-amber)",
+  critical: "var(--color-trust-red)",
+};
+
+const ALERTS_POLL_MS = 20_000;
+
 const PUBLIC_MESSAGE: Record<TrustLabel, { title: string; body: string }> = {
   green: { title: "Safe", body: "The forecast matches real sensor readings at this location." },
   amber: {
@@ -70,6 +87,8 @@ export function DigitalTwin() {
   const [mode, setMode] = useState<Mode>("expert");
   const [center, setCenter] = useState(REGION_CENTER);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [alerts, setAlerts] = useState<Alert[] | null>(null);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
 
   const load = useCallback(async (chosenEngine: "auto" | "gnn" | "fallback") => {
     setError(null);
@@ -88,6 +107,33 @@ export function DigitalTwin() {
     load(engine);
   }, [engine, load]);
 
+  // Person 2's Drift Memory Engine is a separate, optional process -- its
+  // absence shouldn't block the rest of the page (unlike the Graph Fusion
+  // Engine above), so failures land in their own `alertsError` state rather
+  // than the big red "offline" banner.
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const response = await driftApi.alerts();
+        if (!cancelled) {
+          setAlerts(response);
+          setAlertsError(null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setAlertsError(err instanceof ApiError ? err.message : "Unexpected error reaching the Drift Memory Engine.");
+        }
+      }
+    };
+    poll();
+    const interval = setInterval(poll, ALERTS_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
   const markers: GlobeMarker[] =
     fused?.points.filter((p) => p.is_sensor_node).map((p) => ({
       id: pointId(p),
@@ -96,6 +142,7 @@ export function DigitalTwin() {
       label: `${p.sst_c?.toFixed(1) ?? "N/A"}°C`,
       detail: `confidence ${Math.round(p.confidence * 100)}%`,
       trust: p.trust_label,
+      depthM: p.depth_m,
     })) ?? [];
 
   const selectedPoint: FusedPoint | null = useMemo(() => {
@@ -170,11 +217,37 @@ export function DigitalTwin() {
         </div>
       )}
 
-      <div className="mt-12 grid gap-12 lg:grid-cols-[1fr_1fr]">
+      <div className="relative mt-12 grid gap-12 lg:grid-cols-[1fr_1fr]">
+        <AnnotationLayer
+          items={[
+            {
+              x: 9,
+              y: 2,
+              dx: 12,
+              dy: 4,
+              text: "Drag to rotate, or click the ocean to unwrap it into a flat map",
+            },
+            {
+              x: 20,
+              y: 76,
+              dx: 9,
+              dy: -9,
+              text: "Green / amber / red: how closely the model agrees with real sensors here",
+            },
+            {
+              x: 58,
+              y: 13,
+              dx: 14,
+              dy: 5,
+              text: "Live output from the real Graph Fusion Engine, not pre-recorded",
+            },
+          ]}
+        />
         <div className="flex flex-col items-center gap-4">
           <Globe
             focus={REGION_CENTER}
             markers={markers}
+            regionBBox={REGION_BBOX}
             onCenterChange={setCenter}
             onMarkerClick={setSelectedId}
             selectedId={selectedId}
@@ -191,7 +264,11 @@ export function DigitalTwin() {
               ))}
             </div>
           )}
-          <p className="max-w-[520px] text-center text-xs opacity-50">Click any point on the globe to inspect it.</p>
+          <p className="max-w-[520px] text-center text-xs opacity-50">
+            Click any point to inspect it, or click the ocean itself (or the corner button) to
+            unwrap the globe into a flat map of the region without losing depth: each sensor's
+            stem keeps sticking out of the map in real 3D, something a flat 2D map can't show.
+          </p>
         </div>
 
         <div>
@@ -274,12 +351,38 @@ export function DigitalTwin() {
           )}
 
           <div className="mt-12 border-t pt-8" style={{ borderColor: "var(--color-border)" }}>
-            <h2 className="font-nav text-xs opacity-60">Live alert feed</h2>
-            <p className="mt-3 text-sm opacity-60">
-              Waiting on the Drift Memory Engine's <code className="font-mono-data">/alerts</code>{" "}
-              WebSocket. That track isn't wired into this API yet, so this panel intentionally
-              shows nothing rather than a fabricated feed.
-            </p>
+            <h2 className="font-nav text-xs opacity-60">
+              Live alert feed {alerts && alerts.length > 0 ? `(${alerts.length})` : ""}
+            </h2>
+            {alertsError && (
+              <p className="mt-3 text-sm" style={{ color: "var(--color-trust-red)" }}>
+                Can't reach the Drift Memory Engine at <code className="font-mono-data">{DRIFT_API_BASE_URL}</code>.
+                {" "}
+                {alertsError}
+              </p>
+            )}
+            {!alertsError && alerts && alerts.length === 0 && (
+              <p className="mt-3 text-sm opacity-60">No active drift alerts right now.</p>
+            )}
+            {!alertsError && alerts && alerts.length > 0 && (
+              <div className="mt-4 max-h-80 space-y-3 overflow-y-auto pr-2">
+                {alerts.map((a) => (
+                  <div key={a.id} className="border-b pb-3 text-sm" style={{ borderColor: "var(--color-border)" }}>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: ALERT_SEVERITY_COLOR[a.severity] }}
+                      />
+                      <span className="font-nav text-xs uppercase opacity-60">{a.severity}</span>
+                      <span className="font-mono-data text-xs opacity-40">
+                        {a.lat.toFixed(2)}, {a.lon.toFixed(2)}
+                      </span>
+                    </div>
+                    <p className="mt-1 opacity-80">{a.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

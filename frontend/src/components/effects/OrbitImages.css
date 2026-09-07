@@ -43,6 +43,10 @@
   align-items: center;
   justify-content: center;
   z-index: 10;
+  /* This div's box spans the whole ring (inset:0), not just the caption
+     text in its middle, so without this it silently intercepts clicks
+     meant for every orbiting image, not just the ones directly behind it. */
+  pointer-events: none;
 }
 
 .orbit-image {

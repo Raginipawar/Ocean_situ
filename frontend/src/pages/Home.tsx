@@ -302,6 +302,7 @@ export function Home() {
               focus={REGION_CENTER}
               regionBBox={REGION_BBOX}
               onCenterChange={setCenter}
+              enableFlatten={false}
               className="w-full max-w-[560px]"
             />
             <CoordinateReadout label={REGION_LABEL} lat={center.lat} lon={center.lon} className="opacity-70" />
