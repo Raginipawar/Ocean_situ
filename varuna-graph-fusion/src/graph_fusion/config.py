@@ -122,6 +122,7 @@ class SourceConfig:
     # "mock" | "http" | "pipeline" (Person 4's varuna_model_pipeline, in-process)
     model_source: str = os.getenv("VARUNA_MODEL_SOURCE", "mock")
     model_source_url: str = os.getenv("VARUNA_MODEL_SOURCE_URL", "http://localhost:8000/model")
+    # "mock" | "http" | "pipeline" (Person 6's varuna_insitu_pipeline, in-process)
     observation_source: str = os.getenv("VARUNA_OBS_SOURCE", "mock")
     observation_source_url: str = os.getenv("VARUNA_OBS_SOURCE_URL", "http://localhost:8000/observations")
     http_timeout_s: float = 5.0
