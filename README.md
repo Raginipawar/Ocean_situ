@@ -1,133 +1,360 @@
-# VARUNA 
+# VARUNA — Visualization & Assimilation of Real-time Underwater Network Analytics
 
-**Visualization & Assimilation of Real-time Underwater Network Analytics**
-Team **Hudson Hackers** ·
+A browser-based 3D ocean digital twin that fuses numerical ocean model
+output with in-situ sensor observations, and flags when the model and
+reality disagree.
 
-A browser-based living digital twin of the Indian Ocean that fuses
-INCOIS/HOOFS-class forecast model output with real Argo/Glider/CTD/Buoy
-observations, and actively flags when the model and reality disagree —
-instead of leaving that comparison to manual, periodic desktop work.
+> "From coordinates to currents."
 
-Full pitch, architecture, feasibility, and research references:
-[`Problem_approach/`](Problem_approach) (source PDFs — the team's approach
-document and slide decks).
+Smart India Hackathon 2026 — Problem Statement SIH26067
 
-## What's in this repo
+---
 
-| Folder | What it is |
-|---|---|
-| [`Problem_approach/`](Problem_approach) | The team's approach document, SIH slide deck, and Round-2 work-distribution plan (source PDFs) |
-| [`varuna-graph-fusion/`](varuna-graph-fusion) | **Built.** Person 1's track: the Graph Fusion Engine — see its own [README](varuna-graph-fusion/README.md) |
-| [`model-pipeline/`](model-pipeline) | **Built.** Person 4's track: Ocean Model Data Pipeline (INCOIS LAS + Copernicus GLORYS ingestion, canonical schema, regridding) — see its own [README](model-pipeline/README.md) |
-| [`insitu-pipeline/`](insitu-pipeline) | **Built.** Person 6's track: In-Situ Data Pipeline + extensible Adapter Pattern (real Argo/Glider/Argovis/NOAA WOD adapters, QC filtering) |
-| [`drift-memory-engine/`](drift-memory-engine) | **Built.** Person 2's track: Drift Memory Engine — Titans-inspired rolling per-sub-basin "surprise" score, `/alerts` |
-| [`varuna-streaming-nowcast/`](varuna-streaming-nowcast) | **Built.** Person 3's track: Streaming Backbone + Nowcast Engine (stretch goal) — trained on **real** Copernicus Marine data, predicts a genuine 3D (depth × lat × lon) volume, beats a persistence baseline on held-out real test data. See its own [README](varuna-streaming-nowcast/README.md) |
-| [`backend/`](backend) | Backend API scaffold (Person 5's track: REST + WebSocket gateway, OGC standards layer) |
-| [`frontend/`](frontend) | **First pass.** Landing page + an initial 3D digital twin showcase, live-wired to the Graph Fusion Engine's `/fused` endpoint — see its own [README](frontend/README.md) for the design system and how to run it |
+## Table of Contents
 
-`varuna-graph-fusion` is built to plug into every other track via a
-documented API contract and adapter pattern (see its README §5 and §9), so
-wiring real tracks together is a config change, not a rewrite;
-`varuna-streaming-nowcast` follows the same pattern (its own
-`schemas.py`/`grid_utils.py`) for its optional hand-off to Drift Memory or
-the frontend.
+| Section | Description |
+|---------|-------------|
+| [What This Project Delivers](#what-this-project-delivers) | Capabilities and system output |
+| [The Problem](#the-problem) | Why this project exists |
+| [The Solution](#the-solution) | Graph-based fusion approach |
+| [System Architecture](#system-architecture) | The six-service breakdown |
+| &emsp;[Service 1 — Model Pipeline](#service-1--model-pipeline) | Gridded ocean model ingestion |
+| &emsp;[Service 2 — In-Situ Pipeline](#service-2--in-situ-pipeline) | Sensor observation ingestion |
+| &emsp;[Service 3 — Graph Fusion Engine](#service-3--graph-fusion-engine) | GNN correction layer |
+| &emsp;[Service 4 — Drift Detection](#service-4--drift-detection) | Model-observation divergence alerts |
+| &emsp;[Service 5 — REST Gateway](#service-5--rest-gateway) | Unified API surface |
+| &emsp;[Service 6 — 3D Frontend](#service-6--3d-frontend) | React + Three.js digital twin |
+| [Design Principles](#design-principles) | Contracts, adapters, fallbacks |
+| [How the Pipeline Works](#how-the-pipeline-works) | End-to-end data flow |
+| [Validation & Results](#validation--results) | Metrics and test coverage |
+| [Data Sources](#data-sources) | What runs where |
+| [Compared to Existing Tools](#compared-to-existing-tools) | Where VARUNA differs |
+| [Impact](#impact) | Who this is for |
+| [Feasibility](#feasibility) | Why this is buildable |
+| [Running Locally](#running-locally) | Setup instructions |
+| [Tech Stack](#tech-stack) | Technologies and tools used |
+| [Roadmap](#roadmap) | Where this is heading |
+| [Presentation](#presentation) | Full pitch deck |
+| [Author](#author) | Project credits |
 
-## System architecture
+---
+
+## What This Project Delivers
+
+VARUNA is a six-service platform that takes a gridded ocean forecast and a
+scatter of real sensor readings, reconciles them into one corrected field,
+and renders the result as an explorable 3D globe.
+
+- **Graph-Based Fusion** — A graph neural network corrects a 756-point
+  ocean model grid against 29 sensor stations, learning spatial
+  relationships rather than applying distance-weighted interpolation.
+- **Continuous Drift Detection** — Model-observation divergence is scored
+  automatically and surfaced as live alerts, replacing periodic manual
+  validation.
+- **Trust-Scored Visualization** — Every sensor marker carries a
+  confidence score, so a researcher can see at a glance where the model
+  and the ocean disagree.
+- **Dual-Audience Interface** — A dense scientific view for researchers
+  and a simplified safe/caution/avoid view for coastal communities.
+- **Degrades Instead of Breaking** — Every upstream has a tested fallback.
+  No single service failure takes the platform to zero.
+
+---
+
+## The Problem
+
+Ocean forecasting agencies run numerical models and separately collect
+sensor data from Argo floats, gliders, CTD casts, and moored buoys. The
+comparison between the two happens manually, in desktop tools, on a
+periodic schedule.
+
+- Model output and in-situ observations live in separate tools with no
+  unified view
+- Validation requires researcher intervention for every data source
+- Divergence between model and reality is caught late, if at all
+- Existing viewers are 2D, depth-flat, and expert-only
+
+> What if the comparison ran continuously, and told you the moment the
+> model stopped matching the ocean?
+
+---
+
+## The Solution
+
+<img width="3000" alt="System Architecture" src="https://github.com/user-attachments/assets/4dcf0781-7d28-4372-8c49-a8e96c3488a7" />
+
+> Fuse → Detect → Validate → Serve → Show
+
+VARUNA treats the model grid and the sensor network as one graph. Grid
+points and sensor stations become nodes; spatial proximity becomes edges.
+A GNN learns the correction from observed nodes and propagates it across
+the field.
+
+Where classical interpolation weights by distance alone, the graph
+formulation lets the correction follow the structure of the data — and
+because the model trains per request on the current snapshot, it adapts
+as sensors come and go.
+
+---
+
+## System Architecture
+
+<img width="3000" alt="The Solution" src="https://github.com/user-attachments/assets/5778a577-11cc-494b-b1a5-0b061d7e1b45" />
 
 ```
-DATA SOURCES          Ocean model (ROMS/HYCOM, NetCDF)  +  Argo/Glider/CTD/Buoy (real readings)
-                                        │
-INGESTION LAYER        xarray/netCDF parsing, regridding, adapter-per-source
-                                        │
-INTELLIGENCE LAYER      ① Graph Fusion Engine   <- varuna-graph-fusion
-   (the differentiator)  ② Drift Memory Engine   <- drift-memory-engine
-                          ③ Streaming Backbone + Nowcast Engine (stretch)
-                            <- varuna-streaming-nowcast (real Copernicus data,
-                               genuine 3D volume prediction)
-                                        │
-API LAYER               REST (/model /observations /fused /alerts) + WebSocket push
-                                        │
-VISUALIZATION LAYER      CesiumJS/Three.js: 3D ocean surface, trust overlay,
-                          time-scrubber, live alert feed, expert/public mode
+[ Model Pipeline ]  ─┐
+                     ├─►  [ Graph Fusion Engine ]  ─►  [ Drift Detection ]
+[ In-Situ Pipeline ]─┘              │                          │
+                                    ▼                          ▼
+                             [ REST Gateway ]  ─────►  [ 3D Frontend ]
 ```
 
-## Sprint plan (Sept 5–8, 4-day core build)
+---
 
-Per [`Problem_approach/Varuna_67_WD.pdf`](Problem_approach/Varuna_67_WD.pdf):
-6 people, 6 parallel tracks, everyone builds against an agreed API contract
-from Day 1 so nobody blocks anybody. UI/visualization is intentionally not
-touched until Day 4 — the backend + intelligence loop must work end-to-end
-(testable via curl/Postman) first.
+## Service 1 — Model Pipeline
 
-- **Day 1 (Sept 5):** contracts + scaffolding — lock the JSON shape of all 4
-  endpoints, confirm region (Bay of Bengal) and the variable set.
-- **Day 2 (Sept 6):** real data starts replacing mocks.
-- **Day 3 (Sept 7):** full integration, no UI yet — real model data → real
-  in-situ data → Graph Fusion → Drift Memory → alerts, all testable via
-  curl/Postman.
-- **Day 4 (Sept 8):** frontend blitz + record + rehearse.
+Ingests gridded ocean model output and normalizes it into the shared
+schema.
 
-**Person 1 / Graph Fusion Engine (this repo) status:** Days 1–2 complete —
-graph structure designed, GNN + training-free fallback correction both
-running end-to-end against mock data, `/fused` live and tested (50 passing
-tests). Since Person 4/6 haven't started their real pipelines yet, extra
-Day 2 time went into de-risking Day 3 ahead of schedule: resilient per-point
-parsing, physical-plausibility sanitization against QC/sentinel values, and
-content-hash caching so repeated `/fused` calls don't retrain the GNN
-unnecessarily. Ready to wire to Person 4's real `/model` and Person 6's real
-`/observations` the moment they're up — see
-[`varuna-graph-fusion/README.md` §9](varuna-graph-fusion/README.md#9-wiring-in-real-data-day-3)
-and the handoff checklist,
-[`varuna-graph-fusion/DAY3_INTEGRATION.md`](varuna-graph-fusion/DAY3_INTEGRATION.md).
+| Aspect | Detail |
+|--------|--------|
+| Input | NetCDF, CF-convention aware |
+| Variables | Sea surface temperature, currents, salinity, depth |
+| Output | 756-point normalized grid snapshot |
+| Extensibility | Adapter per source — new products plug in without touching downstream services |
 
-**Person 3 / Streaming Backbone + Nowcast Engine status:** both pieces
-complete, and the Nowcast Engine (a stretch goal per the work brief) went
-further than "an honest attempt" — trained on **real Copernicus Marine**
-data (GLORYS reanalysis, Waves Reanalysis, Biogeochemistry Hindcast; not
-synthetic), predicting a genuine 3D (depth × lat × lon) volume across all 5
-tracked variables, and **beats a persistence baseline on real held-out test
-data**. Full evidence trail (loss curve, predicted-vs-actual maps, metrics,
-trained checkpoint) in
-[`varuna-streaming-nowcast/results/`](varuna-streaming-nowcast/results). A
-live-data contribution to Person 4's `model-pipeline`
-(`sources/glorys_live.py`, the authenticated-fetch piece his own checkpoint
-deferred) is included and **wired into his active source-selection flow**
-behind an opt-in config flag (`use_live_glorys_fallback`, off by default) —
-so Person 1's Graph Fusion Engine can pull real, live Copernicus data
-through the same `/model` path it already consumes from, once that flag is
-turned on — see
-[`model-pipeline/README.md`](model-pipeline/README.md#live-glorys-fetch) and
-[`varuna-streaming-nowcast/README.md` §5](varuna-streaming-nowcast/README.md#5-integration-contracts).
+---
 
-## Quick start
+## Service 2 — In-Situ Pipeline
 
-**Backend (Graph Fusion Engine):**
+Ingests point observations from the sensor network.
 
-```powershell
-cd varuna-graph-fusion
-.\scripts\setup_env.ps1
-python -m pytest -q                 # 50 tests
-python scripts/run_demo.py          # end-to-end CLI demo
-uvicorn graph_fusion.api:app --reload --port 8000   # live API
+| Aspect | Detail |
+|--------|--------|
+| Sources | Argo floats, gliders, CTD casts, moored buoys |
+| Stations | 29 in the demo region |
+| Parsing | Per-record resilient — one malformed reading does not fail the batch |
+| Output | Normalized observation records matching the fusion input contract |
+
+---
+
+## Service 3 — Graph Fusion Engine
+
+**Framework:** PyTorch Geometric + FastAPI
+
+The core of the system. Builds a graph over model grid points and sensor
+stations, then trains a GCN to correct the model field toward the
+observations.
+
+- Trains per request on the current snapshot — no stale global model
+- **Leave-sensors-out validation** on every run: a held-out subset of
+  stations measures whether the correction actually generalizes
+- **Content-hash caching** — identical input skips retraining entirely
+- **Graph-weighted fallback** — when sensor count is too low to train,
+  a non-GNN weighted correction runs instead
+
+---
+
+## Service 4 — Drift Detection
+
+Scores divergence between the fused field and incoming observations, and
+raises alerts when the model stops tracking reality.
+
+| Output | Purpose |
+|--------|---------|
+| Divergence score | Per sub-region measure of model-observation disagreement |
+| Alert feed | Ranked list of regions where drift exceeds threshold |
+| Trust weight | Per-station confidence, consumed by the frontend overlay |
+
+---
+
+## Service 5 — REST Gateway
+
+**Framework:** FastAPI
+
+Single API surface over all upstream services.
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /model` | Normalized model grid snapshot |
+| `GET /observations` | In-situ sensor records |
+| `GET /fused` | Corrected field with per-point confidence |
+| `GET /alerts` | Active drift alerts |
+
+---
+
+## Service 6 — 3D Frontend
+
+**Framework:** React 19 + TypeScript + Three.js
+
+An interactive digital twin rendered in the browser.
+
+| Element | Description |
+|---------|-------------|
+| 3D globe | Explorable ocean surface with the fused field rendered as a colour field |
+| Trust-scored markers | Sensor stations sized and coloured by confidence |
+| Click-to-inspect | Modal showing a station's readings and local spatial context |
+| Dual-mode toggle | Expert scientific view / simplified public view |
+| Live alert feed | Consumes the drift service and surfaces active alerts |
+
+---
+
+## Design Principles
+
+The interesting engineering problem here was never the model. It was
+making six services survive each other.
+
+- **One shared contract.** Every service reads and writes Pydantic
+  schemas defined once and matched field-for-field across boundaries.
+- **Swappable adapters.** Each upstream can be called in `mock`, `http`,
+  or `in-process` mode. The same code path runs in tests, in local dev,
+  and in deployment.
+- **Fallback on every hop.** If an upstream is down, malformed, or slow,
+  the caller degrades to a tested lightweight path rather than failing.
+  The platform never breaks to zero.
+- **54 automated tests** across the stack, covering the contracts, the
+  fallbacks, and the fusion validation.
+
+---
+
+## How the Pipeline Works
+
+1. Model pipeline pulls a gridded snapshot and normalizes it to the
+   shared schema
+2. In-situ pipeline pulls sensor records and normalizes them the same way
+3. Fusion engine builds a graph over grid points and stations
+4. GCN trains on observed nodes, with a held-out station subset reserved
+   for validation
+5. Corrected field is returned with per-point confidence, and cached
+   against the input hash
+6. Drift service compares the fused field to observations and scores
+   divergence
+7. Gateway exposes model, observations, fused field, and alerts over REST
+8. Frontend renders the globe, the trust overlay, and the live alert feed
+
+---
+
+## Validation & Results
+
+| Metric | Value |
+|--------|-------|
+| Model grid points | 756 |
+| Sensor stations | 29 |
+| Validation method | Leave-sensors-out on held-out stations |
+| Automated tests | 54 |
+| Fallback coverage | Every upstream call path |
+| Cache behaviour | Content-hash — unchanged input skips retraining |
+
+---
+
+## Data Sources
+
+The demo runs in local mode against a bundled demo dataset so the whole
+pipeline is reproducible without credentials.
+
+| Layer | Demo mode | Production path |
+|-------|-----------|-----------------|
+| Ocean model | Bundled demo grid | INCOIS LAS / Copernicus Marine (GLORYS), NetCDF |
+| In-situ | Bundled demo observations | Argo, glider, CTD, and buoy feeds |
+
+Both pipelines use the adapter pattern, so switching from demo to live
+sources is a configuration change, not a rewrite.
+
+---
+
+## Compared to Existing Tools
+
+<img width="3000" alt="Comparison with existing tools" src="https://github.com/user-attachments/assets/289fcfd8-7603-4874-92e1-c6200f2c7acb" />
+
+**Current build status:** graph fusion, drift alerts, trust overlay, the
+adapter layer, and the dual-mode 3D frontend are implemented and tested.
+Depth-resolved isosurface rendering and the full interactive control set
+(depth-slice, colorbar editor, vertical exaggeration) are on the roadmap
+below, not yet shipped.
+
+---
+
+## Impact
+
+<img width="3000" alt="Impact and benefits" src="https://github.com/user-attachments/assets/4e5bd2ba-6903-4396-ac8f-2612133bb118" />
+
+---
+
+## Feasibility
+
+<img width="3000" alt="Feasibility and viability" src="https://github.com/user-attachments/assets/a0b29d72-45c8-4e33-95e6-e91250684152" />
+
+---
+
+## Running Locally
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Start the fusion engine
+uvicorn fusion.main:app --port 8001
+
+# Start the drift service
+uvicorn drift.main:app --port 8002
+
+# Start the gateway
+uvicorn gateway.main:app --port 8000
+
+# Start the frontend
+cd frontend && npm install && npm run dev
 ```
 
-**Streaming Backbone + Nowcast Engine:**
+Run the test suite:
 
-```powershell
-cd varuna-streaming-nowcast
-.\scripts\setup_env.ps1
-python -m pytest tests -q --ignore=tests\test_real_ocean_data.py   # 27 tests, no real-data files needed
-python scripts\run_demo.py                                         # streaming backbone + nowcast demo
+```bash
+pytest
 ```
 
-**Frontend** (in a second terminal, backend running first for live data):
+---
 
-```powershell
-cd frontend
-npm install
-npm run dev
-```
+## Tech Stack
 
-Full details: [`varuna-graph-fusion/README.md`](varuna-graph-fusion/README.md)
-· [`varuna-streaming-nowcast/README.md`](varuna-streaming-nowcast/README.md)
-· [`frontend/README.md`](frontend/README.md)
+| Component | Technology |
+|-----------|-----------|
+| Graph learning | PyTorch Geometric |
+| Backend services | FastAPI + Pydantic |
+| Data handling | xarray, NumPy, Pandas |
+| Frontend | React 19 + TypeScript + Vite |
+| 3D rendering | Three.js |
+| Styling | Tailwind CSS |
+| Testing | pytest |
+
+---
+
+## Roadmap
+
+- Swap demo adapters for live INCOIS and Copernicus feeds
+- WebSocket push in place of polling for the alert feed
+- OGC WMS/WCS and OPeNDAP endpoints so other tools can consume the
+  fused field directly
+- Isosurface extraction for depth-resolved volume rendering
+- Full interactive control set — depth-slice, colorbar editor, vertical
+  exaggeration
+- Extend beyond the demo region — the graph formulation is not
+  basin-specific
+
+---
+
+## Presentation
+
+Full pitch deck — Smart India Hackathon 2026, Problem Statement SIH26067:
+
+[View Full Presentation (PDF)](https://github.com/user-attachments/files/32061595/SIH-67_.pdf)
+
+---
+
+## Author
+
+**Ragini Pawar** — Developer
+
+GitHub: [github.com/Raginipawar/Ocean_situ](https://github.com/Raginipawar/Ocean_situ)
+
+---
+
+> "The comparison should not wait for someone to run it."
